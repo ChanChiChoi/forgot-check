@@ -9,6 +9,7 @@ import android.location.Location;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Looper;
 import android.view.View;
 import android.widget.Button;
@@ -49,6 +50,8 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
     private TextView tvDebugGPS;
     private TextView tvDebugTime;
     private Handler debugHandler;
+    private HandlerThread debugHandlerThread;
+    private Handler debugBackgroundHandler;
     private android.location.LocationManager debugLocationManager;
     private android.location.LocationListener debugLocationListener;
     private volatile android.location.Location debugCurrentLocation;
@@ -168,12 +171,17 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
             public void onProviderDisabled(String provider) {}
         };
 
+        // Background thread for GPS requests (avoid ANR on main thread)
+        debugHandlerThread = new HandlerThread("DebugLocationThread");
+        debugHandlerThread.start();
+        debugBackgroundHandler = new Handler(debugHandlerThread.getLooper());
+
         debugLocationRunnable = new Runnable() {
             @Override
             public void run() {
                 requestDebugLocation();
                 if (SettingsActivity.isDebugEnabled(MainActivity.this)) {
-                    debugHandler.postDelayed(this, 15_000); // Every 15 seconds
+                    debugBackgroundHandler.postDelayed(this, 15_000); // Every 15 seconds
                 }
             }
         };
@@ -277,12 +285,22 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
             return;
         }
 
-        debugHandler.removeCallbacks(debugLocationRunnable);
-        debugHandler.post(debugLocationRunnable);
+        // Recreate thread if it was quit (from onPause)
+        if (debugBackgroundHandler == null || !debugHandlerThread.isAlive()) {
+            debugHandlerThread = new HandlerThread("DebugLocationThread");
+            debugHandlerThread.start();
+            debugBackgroundHandler = new Handler(debugHandlerThread.getLooper());
+        }
+
+        debugBackgroundHandler.removeCallbacks(debugLocationRunnable);
+        debugBackgroundHandler.post(debugLocationRunnable);
     }
 
     private void stopDebugLocation() {
-        debugHandler.removeCallbacks(debugLocationRunnable);
+        debugBackgroundHandler.removeCallbacks(debugLocationRunnable);
+        if (debugHandlerThread != null) {
+            debugHandlerThread.quit();
+        }
         if (debugLocationManager != null && debugLocationListener != null) {
             try {
                 debugLocationManager.removeUpdates(debugLocationListener);
@@ -319,10 +337,11 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
             debugLocationManager.removeUpdates(debugLocationListener);
 
             if (debugCurrentLocation != null) {
-                updateDebugUI();
-                // Pass location to adapter for distance calculation
-                adapter.setCurrentLocation(debugCurrentLocation);
-                // Check geofence and trigger reminders (debug mode)
+                final android.location.Location loc = debugCurrentLocation;
+                mainHandler.post(() -> {
+                    updateDebugUI();
+                    adapter.setCurrentLocation(loc);
+                });
                 checkDebugGeofence();
             } else {
                 // Fallback to network location
@@ -330,8 +349,11 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
                         android.location.LocationManager.NETWORK_PROVIDER);
                 if (netLoc != null) {
                     debugCurrentLocation = netLoc;
-                    updateDebugUI();
-                    adapter.setCurrentLocation(debugCurrentLocation);
+                    final android.location.Location loc2 = netLoc;
+                    mainHandler.post(() -> {
+                        updateDebugUI();
+                        adapter.setCurrentLocation(loc2);
+                    });
                     checkDebugGeofence();
                 }
             }
@@ -349,6 +371,7 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
 
         executorService.execute(() -> {
             List<CheckInLocationEntity> entities = database.locationDao().getAllLocations();
+            boolean statusChanged = false;
 
             for (CheckInLocationEntity entity : entities) {
                 if (!entity.enabled) continue;
@@ -368,29 +391,35 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
                 boolean isInside = distance <= entity.radiusMeters;
                 String newStatus = isInside ? "inside" : "outside";
 
-                // Only trigger on status change
+                // Always update status in database
                 if (!entity.status.equals(newStatus)) {
                     String oldStatus = entity.status;
 
                     // Update status in database
                     database.locationDao().updateStatus(entity.id, newStatus);
+                    statusChanged = true;
 
                     if (!"unknown".equals(oldStatus)) {
-                        String reminderMessage;
+                        boolean timeWindowAllows = isInside
+                                ? location.isInEnterTimeWindow()
+                                : location.isInLeaveTimeWindow();
 
-                        if (isInside) {
-                            if (!location.isInEnterTimeWindow()) continue;
-                            reminderMessage = "你进入了 " + entity.name + "，请记得打卡！";
-                        } else {
-                            if (!location.isInLeaveTimeWindow()) continue;
-                            reminderMessage = "你离开了 " + entity.name + "，请记得打卡！";
+                        if (timeWindowAllows) {
+                            String reminderMessage = isInside
+                                    ? "你进入了 " + entity.name + "，请记得打卡！"
+                                    : "你离开了 " + entity.name + "，请记得打卡！";
+
+                            // Trigger reminder on main thread
+                            final String msg = reminderMessage;
+                            mainHandler.post(() -> triggerDebugReminder(msg));
                         }
-
-                        // Trigger reminder on main thread
-                        final String msg = reminderMessage;
-                        mainHandler.post(() -> triggerDebugReminder(msg));
                     }
                 }
+            }
+
+            // Reload location list from DB so cards show updated status
+            if (statusChanged) {
+                mainHandler.post(() -> loadLocationsFromDatabase());
             }
         });
     }

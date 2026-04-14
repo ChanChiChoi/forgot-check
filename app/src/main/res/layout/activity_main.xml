@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
@@ -31,7 +32,8 @@
             android:text="监控"
             android:textColor="#FFFFFF"
             android:textSize="14sp"
-            android:thumbTint="#FFFFFF" />
+            app:thumbTint="@color/switch_thumb_color_service"
+            app:trackTint="@color/switch_track_color_service" />
 
         <Button
             android:id="@+id/btnSettings"

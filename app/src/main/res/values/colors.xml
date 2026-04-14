@@ -3,4 +3,10 @@
     <color name="colorPrimary">#1976D2</color>
     <color name="colorPrimaryDark">#1565C0</color>
     <color name="colorAccent">#FF5722</color>
+
+    <!-- Service monitor switch colors -->
+    <color name="switch_thumb_red">#F44336</color>
+    <color name="switch_thumb_grey">#9E9E9E</color>
+    <color name="switch_track_red">#EF9A9A</color>
+    <color name="switch_track_grey">#BDBDBD</color>
 </resources>
