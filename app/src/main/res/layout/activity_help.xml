@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFFFFF">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="使用说明"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="#1976D2"
+            android:layout_marginBottom="20dp" />
+
+        <!-- Section 1 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="一、添加打卡地点"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#333333"
+            android:layout_marginTop="16dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="1. 点击右下角 + 按钮添加打卡地点\n2. 输入地点名称（如：公司、家）\n3. 点击「📍 获取当前位置」自动填入经纬度，也可手动输入\n4. 设置提醒半径（米），即进入/离开该范围时触发提醒"
+            android:textSize="14sp"
+            android:textColor="#555555"
+            android:lineSpacingExtra="4dp"
+            android:layout_marginTop="8dp" />
+
+        <!-- Section 2 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="二、时间范围设置"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#333333"
+            android:layout_marginTop="20dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="每个打卡地点可以设置两个时间范围：\n\n• 上班靠近时间范围 — 仅在指定时间段内，进入区域时才提醒\n• 下班远离时间范围 — 仅在指定时间段内，离开区域时才提醒\n\n开关说明：\n• 开关打开：只在设定时间范围内提醒，防止误报警\n• 开关关闭：任何时间进出都提醒（不受时间限制）"
+            android:textSize="14sp"
+            android:textColor="#555555"
+            android:lineSpacingExtra="4dp"
+            android:layout_marginTop="8dp" />
+
+        <!-- Example -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="三、使用示例"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#333333"
+            android:layout_marginTop="20dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="场景：上下班打卡提醒\n\n1. 添加地点「公司」，设置坐标和半径 200 米\n2. 打开「上班靠近」开关，设置 08:50 ~ 09:03\n   → 仅在早上 8:50 到 9:03 之间，靠近公司时提醒打卡\n3. 打开「下班远离」开关，设置 17:50 ~ 18:10\n   → 仅在下午 5:50 到 6:10 之间，离开公司时提醒打卡\n4. 其他时间进出公司不会报警，避免误提醒"
+            android:textSize="14sp"
+            android:textColor="#555555"
+            android:lineSpacingExtra="4dp"
+            android:layout_marginTop="8dp" />
+
+        <!-- Section 4 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="四、后台监控"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#333333"
+            android:layout_marginTop="20dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="1. 点击顶部工具栏可启动/停止位置监控\n2. 监控启动后，状态栏会显示持续通知\n3. App 关闭后，后台仍会每 30 秒检测一次位置\n4. 手机重启后，监控服务自动启动"
+            android:textSize="14sp"
+            android:textColor="#555555"
+            android:lineSpacingExtra="4dp"
+            android:layout_marginTop="8dp" />
+
+        <!-- Section 5 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="五、管理打卡地点"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#333333"
+            android:layout_marginTop="20dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="• 点击卡片：编辑地点信息（名称、坐标、半径、时间范围）\n• 左滑卡片：删除该地点\n• 启用/禁用开关：暂停监控但不删除\n\n⚠️ 注意：请确保授予位置权限和悬浮窗权限，否则提醒可能无法正常工作。"
+            android:textSize="14sp"
+            android:textColor="#555555"
+            android:lineSpacingExtra="4dp"
+            android:layout_marginTop="8dp" />
+
+    </LinearLayout>
+
+</ScrollView>

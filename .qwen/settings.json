@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker run *)",
+      "Bash(cp *)",
+      "Bash(rm *)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(unzip *)",
+      "Bash(chmod *)",
+      "Bash(/home/zzc/workspace/anzhuo/build.sh)",
+      "Bash(/home/zzc/workspace/anzhuo/build.sh *)",
+      "Bash(git add *)"
+    ]
+  },
+  "$version": 3
+}

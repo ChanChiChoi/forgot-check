@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Background -->
+    <path
+        android:fillColor="#1565C0"
+        android:pathData="M0,0h108v108H0z"/>
+
+    <!-- Machine body - rounded rectangle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M36,22h36a6,6 0,0 1,6 6v52a6,6 0,0 1,-6 6H36a6,6 0,0 1,-6 -6V28a6,6 0,0 1,6 -6z"/>
+
+    <!-- Screen background -->
+    <path
+        android:fillColor="#E3F2FD"
+        android:pathData="M40,28h28v20H40z"/>
+
+    <!-- Clock circle -->
+    <path
+        android:strokeColor="#1976D2"
+        android:strokeWidth="2"
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,36a6,6 0,1 0,0.01 0.01z"/>
+
+    <!-- Clock hands - hour -->
+    <path
+        android:strokeColor="#1976D2"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M54,36v4"/>
+
+    <!-- Clock hands - minute -->
+    <path
+        android:strokeColor="#1976D2"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:pathData="M54,36l3,-2"/>
+
+    <!-- Clock center dot -->
+    <path
+        android:fillColor="#1976D2"
+        android:pathData="M54,36a1,1 0,1 0,0.01 0.01z"/>
+
+    <!-- Punch button / fingerprint area -->
+    <path
+        android:fillColor="#4CAF50"
+        android:pathData="M46,56h16a2,2 0,0 1,2 2v12a2,2 0,0 1,-2 2H46a2,2 0,0 1,-2 -2V58a2,2 0,0 1,2 -2z"/>
+
+    <!-- Fingerprint lines -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:pathData="M50,60v8M54,60v8M58,60v8"/>
+
+    <!-- Check mark badge -->
+    <path
+        android:fillColor="#4CAF50"
+        android:pathData="M68,66a4,4 0,1 0,0.01 0.01z"/>
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M66.5,66l1,1 2,-2"/>
+
+    <!-- LED indicator -->
+    <path
+        android:fillColor="#F44336"
+        android:pathData="M74,32a2,2 0,1 0,0.01 0.01z"/>
+
+</vector>
