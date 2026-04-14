@@ -11,7 +11,8 @@
       "Bash(/home/zzc/workspace/anzhuo/build.sh)",
       "Bash(/home/zzc/workspace/anzhuo/build.sh *)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(./build.sh)"
     ]
   },
   "$version": 3

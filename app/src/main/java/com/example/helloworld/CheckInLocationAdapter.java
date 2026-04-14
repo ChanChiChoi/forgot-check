@@ -22,6 +22,7 @@ public class CheckInLocationAdapter extends RecyclerView.Adapter<CheckInLocation
 
     private List<CheckInLocation> locations = new ArrayList<>();
     private OnLocationActionListener listener;
+    private android.location.Location currentLocation;
 
     public CheckInLocationAdapter(OnLocationActionListener listener) {
         this.listener = listener;
@@ -61,6 +62,23 @@ public class CheckInLocationAdapter extends RecyclerView.Adapter<CheckInLocation
         }
         holder.tvStatus.setText(statusText);
 
+        // Distance display (debug mode)
+        if (currentLocation != null) {
+            float[] results = new float[1];
+            android.location.Location.distanceBetween(
+                    currentLocation.getLatitude(),
+                    currentLocation.getLongitude(),
+                    location.getLatitude(),
+                    location.getLongitude(),
+                    results
+            );
+            float distance = results[0];
+            holder.tvDistance.setVisibility(View.VISIBLE);
+            holder.tvDistance.setText(String.format("距离: %.0f米", distance));
+        } else {
+            holder.tvDistance.setVisibility(View.GONE);
+        }
+
         holder.switchEnabled.setOnCheckedChangeListener(null);
         holder.switchEnabled.setChecked(location.isEnabled());
         holder.switchEnabled.setOnCheckedChangeListener((buttonView, isChecked) -> {
@@ -94,6 +112,14 @@ public class CheckInLocationAdapter extends RecyclerView.Adapter<CheckInLocation
         notifyDataSetChanged();
     }
 
+    /**
+     * Set current GPS location for distance calculation (debug mode).
+     */
+    public void setCurrentLocation(android.location.Location location) {
+        this.currentLocation = location;
+        notifyDataSetChanged();
+    }
+
     public void updateItem(int position, CheckInLocation location) {
         if (position >= 0 && position < locations.size()) {
             locations.set(position, location);
@@ -106,6 +132,7 @@ public class CheckInLocationAdapter extends RecyclerView.Adapter<CheckInLocation
         TextView tvCoords;
         TextView tvRadius;
         TextView tvStatus;
+        TextView tvDistance;
         SwitchCompat switchEnabled;
 
         ViewHolder(@NonNull View itemView) {
@@ -114,6 +141,7 @@ public class CheckInLocationAdapter extends RecyclerView.Adapter<CheckInLocation
             tvCoords = itemView.findViewById(R.id.tvCoords);
             tvRadius = itemView.findViewById(R.id.tvRadius);
             tvStatus = itemView.findViewById(R.id.tvStatus);
+            tvDistance = itemView.findViewById(R.id.tvDistance);
             switchEnabled = itemView.findViewById(R.id.switchEnabled);
         }
     }

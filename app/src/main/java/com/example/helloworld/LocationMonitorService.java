@@ -11,10 +11,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
+import android.location.LocationListener;
 import android.location.LocationManager;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
@@ -28,8 +30,13 @@ import androidx.core.app.NotificationCompat;
 import java.util.List;
 
 /**
- * Foreground service that periodically checks GPS location
+ * Foreground service that actively requests GPS location
  * and triggers reminders when entering/leaving geofence areas.
+ *
+ * GPS polling strategy:
+ * - If ANY enabled location has its time range switch OFF → poll every 15s always
+ * - If ALL enabled locations have their time range switches ON → only poll during active windows
+ * - When service is stopped → completely silent, no GPS requests
  */
 public class LocationMonitorService extends Service {
 
@@ -37,14 +44,10 @@ public class LocationMonitorService extends Service {
     private static final String REMINDER_CHANNEL_ID = "checkin_reminder_channel";
     private static final int NOTIFICATION_ID = 1001;
     private static final int REMINDER_NOTIFICATION_ID = 1002;
-    private static final long CHECK_INTERVAL_MS = 30_000; // Check every 30 seconds
+    private static final long CHECK_INTERVAL_MS = 15_000; // Active GPS request every 15 seconds
 
-    // Static flag to track if service is running (shared across Activity/Service)
     public static volatile boolean isServiceRunning = false;
 
-    /**
-     * Helper method to start the service from Activity or BootReceiver.
-     */
     public static void startService(Context context) {
         Intent intent = new Intent(context, LocationMonitorService.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -54,9 +57,6 @@ public class LocationMonitorService extends Service {
         }
     }
 
-    /**
-     * Helper method to stop the service.
-     */
     public static void stopService(Context context) {
         Intent intent = new Intent(context, LocationMonitorService.class);
         context.stopService(intent);
@@ -69,11 +69,15 @@ public class LocationMonitorService extends Service {
     private LocationManager locationManager;
     private AppDatabase database;
 
+    // Active GPS location listener
+    private LocationListener locationListener;
+    private volatile Location currentLocation;
+
     private final Runnable checkLocationRunnable = new Runnable() {
         @Override
         public void run() {
             checkLocations();
-            backgroundHandler.postDelayed(this, CHECK_INTERVAL_MS);
+            scheduleNextCheck();
         }
     };
 
@@ -86,12 +90,27 @@ public class LocationMonitorService extends Service {
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         mainHandler = new Handler(Looper.getMainLooper());
 
-        // Create notification channel
         createNotificationChannel();
 
-        // Start foreground with notification
         Notification notification = buildNotification("正在监控打卡位置...");
         startForeground(NOTIFICATION_ID, notification);
+
+        // Setup location listener for active GPS requests
+        locationListener = new LocationListener() {
+            @Override
+            public void onLocationChanged(Location location) {
+                currentLocation = location;
+            }
+
+            @Override
+            public void onStatusChanged(String provider, int status, Bundle extras) {}
+
+            @Override
+            public void onProviderEnabled(String provider) {}
+
+            @Override
+            public void onProviderDisabled(String provider) {}
+        };
 
         // Start background location checking
         handlerThread = new HandlerThread("LocationMonitorThread");
@@ -102,13 +121,23 @@ public class LocationMonitorService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        return START_STICKY; // Restart service if killed
+        return START_STICKY;
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
         isServiceRunning = false;
+
+        // Stop active GPS requests completely
+        if (locationListener != null && locationManager != null) {
+            try {
+                locationManager.removeUpdates(locationListener);
+            } catch (Exception e) {
+                // Ignore
+            }
+        }
+
         backgroundHandler.removeCallbacks(checkLocationRunnable);
         if (handlerThread != null) {
             handlerThread.quit();
@@ -126,9 +155,16 @@ public class LocationMonitorService extends Service {
         return null;
     }
 
+    /**
+     * Schedule next GPS check. Always poll every 15s — status is always updated,
+     * only the reminder trigger is gated by time window checks.
+     */
+    private void scheduleNextCheck() {
+        backgroundHandler.postDelayed(checkLocationRunnable, CHECK_INTERVAL_MS);
+    }
+
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // Low importance channel for service status
             NotificationChannel serviceChannel = new NotificationChannel(
                     CHANNEL_ID,
                     "打卡位置监控",
@@ -137,7 +173,6 @@ public class LocationMonitorService extends Service {
             serviceChannel.setDescription("后台监控位置变化，静音");
             serviceChannel.setShowBadge(false);
 
-            // High importance channel for reminders with sound
             NotificationChannel reminderChannel = new NotificationChannel(
                     REMINDER_CHANNEL_ID,
                     "打卡提醒",
@@ -185,18 +220,36 @@ public class LocationMonitorService extends Service {
             return;
         }
 
-        // Get current location
-        Location currentLocation = null;
+        // Actively request current GPS location (blocking call with timeout)
+        Location location = null;
         try {
-            currentLocation = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-            if (currentLocation == null) {
-                currentLocation = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+            locationManager.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER, 0, 0, locationListener);
+
+            // Wait briefly for a location fix (up to 10 seconds)
+            long startTime = System.currentTimeMillis();
+            while (currentLocation == null && (System.currentTimeMillis() - startTime) < 10_000) {
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    break;
+                }
+            }
+            location = currentLocation;
+
+            // Remove updates to save battery — we'll request again next cycle
+            locationManager.removeUpdates(locationListener);
+            currentLocation = null;
+
+            // Fallback to network if GPS failed
+            if (location == null) {
+                location = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
             }
         } catch (Exception e) {
             return;
         }
 
-        if (currentLocation == null) {
+        if (location == null) {
             return;
         }
 
@@ -208,14 +261,13 @@ public class LocationMonitorService extends Service {
                 continue;
             }
 
-            // Convert to domain model for time range checks
-            CheckInLocation location = entity.toCheckInLocation();
+            CheckInLocation checkInLocation = entity.toCheckInLocation();
 
             // Calculate distance using Haversine formula
             float[] results = new float[1];
             Location.distanceBetween(
-                    currentLocation.getLatitude(),
-                    currentLocation.getLongitude(),
+                    location.getLatitude(),
+                    location.getLongitude(),
                     entity.latitude,
                     entity.longitude,
                     results
@@ -225,35 +277,25 @@ public class LocationMonitorService extends Service {
             boolean isInside = distance <= entity.radiusMeters;
             String newStatus = isInside ? "inside" : "outside";
 
-            // Check if status changed
+            // Always update status in database (even if outside time window)
             if (!entity.status.equals(newStatus)) {
                 String oldStatus = entity.status;
 
                 // Update status in database
                 database.locationDao().updateStatus(entity.id, newStatus);
 
-                // Trigger reminder on status change (both entering and leaving)
+                // Trigger reminder on status change ONLY if time window allows
                 if (!"unknown".equals(oldStatus)) {
-                    // Check time range constraints
-                    String reminderMessage;
+                    boolean timeWindowAllows = isInside
+                            ? checkInLocation.isInEnterTimeWindow()
+                            : checkInLocation.isInLeaveTimeWindow();
 
-                    if (isInside) {
-                        // Entering area - check enter time window
-                        if (!location.isInEnterTimeWindow()) {
-                            // Time window enabled but outside range, skip
-                            continue;
-                        }
-                        reminderMessage = "你进入了 " + entity.name + "，请记得打卡！";
-                    } else {
-                        // Leaving area - check leave time window
-                        if (!location.isInLeaveTimeWindow()) {
-                            // Time window enabled but outside range, skip
-                            continue;
-                        }
-                        reminderMessage = "你离开了 " + entity.name + "，请记得打卡！";
+                    if (timeWindowAllows) {
+                        String reminderMessage = isInside
+                                ? "你进入了 " + entity.name + "，请记得打卡！"
+                                : "你离开了 " + entity.name + "，请记得打卡！";
+                        triggerReminder(reminderMessage);
                     }
-
-                    triggerReminder(reminderMessage);
                 }
             }
         }
@@ -262,30 +304,25 @@ public class LocationMonitorService extends Service {
     private void triggerReminder(String message) {
         boolean appInForeground = isAppInForeground();
 
-        // Check settings
         boolean vibrateEnabled = SettingsActivity.isVibrationEnabled(this);
         boolean popupEnabled = SettingsActivity.isPopupEnabled(this);
         boolean notificationEnabled = SettingsActivity.isNotificationEnabled(this);
         boolean countdownEnabled = SettingsActivity.isCountdownEnabled(this);
 
         if (appInForeground) {
-            // Show AlertDialog if enabled
             if (popupEnabled) {
                 mainHandler.post(() -> showForegroundDialog(message, countdownEnabled));
             }
         } else {
-            // Show notification if enabled
             if (notificationEnabled) {
                 sendReminderNotification(message);
             }
         }
 
-        // Vibrate if enabled
         if (vibrateEnabled) {
             vibrate();
         }
 
-        // Start countdown timer if enabled
         if (countdownEnabled) {
             startCountdownTimer(message);
         }
@@ -308,7 +345,6 @@ public class LocationMonitorService extends Service {
     }
 
     private void showForegroundDialog(String message, boolean showCountdown) {
-        // Prevent multiple dialogs from stacking
         if (currentDialog != null && currentDialog.isShowing()) {
             return;
         }
@@ -330,7 +366,6 @@ public class LocationMonitorService extends Service {
                 .setCancelable(false)
                 .create();
 
-        // Need to add SYSTEM_ALERT_WINDOW flag for dialog from service
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             currentDialog.getWindow().setType(
                     android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY);
@@ -372,18 +407,14 @@ public class LocationMonitorService extends Service {
         Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
         if (vibrator != null && vibrator.hasVibrator()) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE));
+                vibrator.vibrate(VibrationEffect.createOneShot(2000, VibrationEffect.DEFAULT_AMPLITUDE));
             } else {
-                vibrator.vibrate(500);
+                vibrator.vibrate(2000);
             }
         }
     }
 
-    // Keep reference to current dialog to prevent duplicates
     private AlertDialog currentDialog;
-
-    // Countdown timer — starts once when reminder is triggered,
-    // fires a final "请打卡" alert after configurable duration.
     private android.os.CountDownTimer countdownTimer;
 
     private void startCountdownTimer(String message) {
@@ -394,7 +425,6 @@ public class LocationMonitorService extends Service {
 
             final long countdownMillis = SettingsActivity.getCountdownMillis(this);
 
-            // Play alarm sound once
             try {
                 Uri alarmSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
                 android.media.Ringtone ringtone = RingtoneManager.getRingtone(this, alarmSound);
@@ -405,7 +435,6 @@ public class LocationMonitorService extends Service {
                 // Ignore
             }
 
-            // Show a brief countdown hint in the dialog if visible
             int countdownSeconds = (int) (countdownMillis / 1000);
             if (currentDialog != null && currentDialog.isShowing()) {
                 currentDialog.setMessage(message + "\n\n⏱️ " + countdownSeconds + "秒后将再次提醒…");
@@ -413,17 +442,13 @@ public class LocationMonitorService extends Service {
 
             countdownTimer = new android.os.CountDownTimer(countdownMillis, countdownMillis) {
                 @Override
-                public void onTick(long millisUntilFinished) {
-                    // No-op — we only care about onFinish
-                }
+                public void onTick(long millisUntilFinished) {}
 
                 @Override
                 public void onFinish() {
-                    // Final reminder after countdown
                     vibrate();
                     sendReminderNotification(message + " ⏰ 请立即打卡！");
 
-                    // Restore normal service notification after 5 seconds
                     mainHandler.postDelayed(() -> {
                         Notification normalNotification = buildNotification("正在监控打卡位置...");
                         NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);

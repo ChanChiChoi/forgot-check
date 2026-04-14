@@ -39,10 +39,20 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
 
     private RecyclerView recyclerView;
     private TextView tvEmpty;
-    private TextView tvServiceStatus;
+    private androidx.appcompat.widget.SwitchCompat switchServiceStatus;
     private FloatingActionButton fabAdd;
     private CheckInLocationAdapter adapter;
     private List<CheckInLocation> locationList = new ArrayList<>();
+
+    // Debug mode fields
+    private android.widget.LinearLayout layoutDebug;
+    private TextView tvDebugGPS;
+    private TextView tvDebugTime;
+    private Handler debugHandler;
+    private android.location.LocationManager debugLocationManager;
+    private android.location.LocationListener debugLocationListener;
+    private volatile android.location.Location debugCurrentLocation;
+    private Runnable debugLocationRunnable;
 
     // Database
     private AppDatabase database;
@@ -64,14 +74,51 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
 
         recyclerView = findViewById(R.id.recyclerView);
         tvEmpty = findViewById(R.id.tvEmpty);
-        tvServiceStatus = findViewById(R.id.tvServiceStatus);
+        switchServiceStatus = findViewById(R.id.switchServiceStatus);
         fabAdd = findViewById(R.id.fabAdd);
+
+        // Debug views
+        layoutDebug = findViewById(R.id.layoutDebug);
+        tvDebugGPS = findViewById(R.id.tvDebugGPS);
+        tvDebugTime = findViewById(R.id.tvDebugTime);
 
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         adapter = new CheckInLocationAdapter(this);
         recyclerView.setAdapter(adapter);
 
         fabAdd.setOnClickListener(v -> showAddLocationDialog());
+
+        // Service status switch click to toggle
+        switchServiceStatus.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isChecked) {
+                // Start service
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    ActivityCompat.requestPermissions(this,
+                            new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                            LOCATION_PERMISSION_REQUEST_CODE);
+                    switchServiceStatus.setChecked(false);
+                    return;
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                            != PackageManager.PERMISSION_GRANTED) {
+                        ActivityCompat.requestPermissions(this,
+                                new String[]{Manifest.permission.ACCESS_BACKGROUND_LOCATION},
+                                BACKGROUND_LOCATION_REQUEST_CODE);
+                        switchServiceStatus.setChecked(false);
+                        return;
+                    }
+                }
+                LocationMonitorService.startService(this);
+                LocationMonitorService.isServiceRunning = true;
+                Toast.makeText(this, "位置监控已启动", Toast.LENGTH_LONG).show();
+            } else {
+                LocationMonitorService.stopService(this);
+                LocationMonitorService.isServiceRunning = false;
+                Toast.makeText(this, "位置监控已停止", Toast.LENGTH_SHORT).show();
+            }
+        });
 
         // Toolbar click to toggle service
         findViewById(R.id.toolbar).setOnClickListener(v -> toggleLocationService());
@@ -101,6 +148,51 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
 
         // Load data from database
         loadLocationsFromDatabase();
+
+        // Initialize debug mode
+        debugHandler = new Handler(Looper.getMainLooper());
+        debugLocationManager = (android.location.LocationManager) getSystemService(LOCATION_SERVICE);
+        debugLocationListener = new android.location.LocationListener() {
+            @Override
+            public void onLocationChanged(android.location.Location location) {
+                debugCurrentLocation = location;
+            }
+
+            @Override
+            public void onStatusChanged(String provider, int status, Bundle extras) {}
+
+            @Override
+            public void onProviderEnabled(String provider) {}
+
+            @Override
+            public void onProviderDisabled(String provider) {}
+        };
+
+        debugLocationRunnable = new Runnable() {
+            @Override
+            public void run() {
+                requestDebugLocation();
+                if (SettingsActivity.isDebugEnabled(MainActivity.this)) {
+                    debugHandler.postDelayed(this, 15_000); // Every 15 seconds
+                }
+            }
+        };
+
+        updateDebugModeVisibility();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        updateServiceStatus();
+        updateDebugModeVisibility();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        // Stop debug location updates when activity is paused
+        stopDebugLocation();
     }
 
     private void requestPermissions() {
@@ -152,46 +244,237 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
     }
 
     private void toggleLocationService() {
-        // Check if we have fine location permission first
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                    LOCATION_PERMISSION_REQUEST_CODE);
-            return;
-        }
-
-        // Request background location for Android 10+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-                    != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.ACCESS_BACKGROUND_LOCATION},
-                        BACKGROUND_LOCATION_REQUEST_CODE);
-                return;
-            }
-        }
-
-        // Check if service is running (simple check)
-        boolean serviceRunning = LocationMonitorService.isServiceRunning;
-
-        if (serviceRunning) {
-            LocationMonitorService.stopService(this);
-            LocationMonitorService.isServiceRunning = false;
-            Toast.makeText(this, "位置监控已停止", Toast.LENGTH_SHORT).show();
-        } else {
-            LocationMonitorService.startService(this);
-            LocationMonitorService.isServiceRunning = true;
-            Toast.makeText(this, "位置监控已启动", Toast.LENGTH_LONG).show();
-        }
-
-        updateServiceStatus();
+        switchServiceStatus.setChecked(!switchServiceStatus.isChecked());
     }
 
     private void updateServiceStatus() {
         boolean running = LocationMonitorService.isServiceRunning;
-        tvServiceStatus.setText(running ? "监控: 运行中" : "监控: 未启动");
-        tvServiceStatus.setTextColor(running ? 0xFF4CAF50 : 0xFFFF9800);
+        switchServiceStatus.setChecked(running);
+    }
+
+    /**
+     * Show/hide debug info panel based on settings.
+     */
+    private void updateDebugModeVisibility() {
+        boolean debugEnabled = SettingsActivity.isDebugEnabled(this);
+        layoutDebug.setVisibility(debugEnabled ? View.VISIBLE : View.GONE);
+
+        if (debugEnabled) {
+            startDebugLocation();
+        } else {
+            stopDebugLocation();
+            tvDebugGPS.setText("GPS: 未获取");
+            tvDebugTime.setText("更新时间: --");
+            debugCurrentLocation = null;
+            adapter.setCurrentLocation(null);
+        }
+    }
+
+    private void startDebugLocation() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            tvDebugGPS.setText("GPS: 无位置权限");
+            return;
+        }
+
+        debugHandler.removeCallbacks(debugLocationRunnable);
+        debugHandler.post(debugLocationRunnable);
+    }
+
+    private void stopDebugLocation() {
+        debugHandler.removeCallbacks(debugLocationRunnable);
+        if (debugLocationManager != null && debugLocationListener != null) {
+            try {
+                debugLocationManager.removeUpdates(debugLocationListener);
+            } catch (Exception e) {
+                // Ignore
+            }
+        }
+        debugCurrentLocation = null;
+        if (debugCountdownTimer != null) {
+            debugCountdownTimer.cancel();
+        }
+    }
+
+    private void requestDebugLocation() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+
+        try {
+            debugLocationManager.requestLocationUpdates(
+                    android.location.LocationManager.GPS_PROVIDER, 0, 0, debugLocationListener);
+
+            // Wait briefly for GPS fix (up to 8 seconds)
+            long startTime = System.currentTimeMillis();
+            while (debugCurrentLocation == null && (System.currentTimeMillis() - startTime) < 8_000) {
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    break;
+                }
+            }
+
+            debugLocationManager.removeUpdates(debugLocationListener);
+
+            if (debugCurrentLocation != null) {
+                updateDebugUI();
+                // Pass location to adapter for distance calculation
+                adapter.setCurrentLocation(debugCurrentLocation);
+                // Check geofence and trigger reminders (debug mode)
+                checkDebugGeofence();
+            } else {
+                // Fallback to network location
+                android.location.Location netLoc = debugLocationManager.getLastKnownLocation(
+                        android.location.LocationManager.NETWORK_PROVIDER);
+                if (netLoc != null) {
+                    debugCurrentLocation = netLoc;
+                    updateDebugUI();
+                    adapter.setCurrentLocation(debugCurrentLocation);
+                    checkDebugGeofence();
+                }
+            }
+        } catch (Exception e) {
+            // Ignore
+        }
+    }
+
+    /**
+     * In debug mode: check distance to each enabled checkpoint,
+     * trigger reminder on status change (same logic as LocationMonitorService).
+     */
+    private void checkDebugGeofence() {
+        if (debugCurrentLocation == null) return;
+
+        executorService.execute(() -> {
+            List<CheckInLocationEntity> entities = database.locationDao().getAllLocations();
+
+            for (CheckInLocationEntity entity : entities) {
+                if (!entity.enabled) continue;
+
+                CheckInLocation location = entity.toCheckInLocation();
+
+                float[] results = new float[1];
+                android.location.Location.distanceBetween(
+                        debugCurrentLocation.getLatitude(),
+                        debugCurrentLocation.getLongitude(),
+                        entity.latitude,
+                        entity.longitude,
+                        results
+                );
+                float distance = results[0];
+
+                boolean isInside = distance <= entity.radiusMeters;
+                String newStatus = isInside ? "inside" : "outside";
+
+                // Only trigger on status change
+                if (!entity.status.equals(newStatus)) {
+                    String oldStatus = entity.status;
+
+                    // Update status in database
+                    database.locationDao().updateStatus(entity.id, newStatus);
+
+                    if (!"unknown".equals(oldStatus)) {
+                        String reminderMessage;
+
+                        if (isInside) {
+                            if (!location.isInEnterTimeWindow()) continue;
+                            reminderMessage = "你进入了 " + entity.name + "，请记得打卡！";
+                        } else {
+                            if (!location.isInLeaveTimeWindow()) continue;
+                            reminderMessage = "你离开了 " + entity.name + "，请记得打卡！";
+                        }
+
+                        // Trigger reminder on main thread
+                        final String msg = reminderMessage;
+                        mainHandler.post(() -> triggerDebugReminder(msg));
+                    }
+                }
+            }
+        });
+    }
+
+    /**
+     * Trigger reminder respecting settings (vibration, popup, notification, countdown).
+     * Used by debug mode.
+     */
+    private void triggerDebugReminder(String message) {
+        boolean vibrateEnabled = SettingsActivity.isVibrationEnabled(this);
+        boolean popupEnabled = SettingsActivity.isPopupEnabled(this);
+        boolean notificationEnabled = SettingsActivity.isNotificationEnabled(this);
+        boolean countdownEnabled = SettingsActivity.isCountdownEnabled(this);
+
+        // Always show popup in debug mode since we're in foreground
+        if (popupEnabled) {
+            showDebugReminderDialog(message, countdownEnabled);
+        }
+
+        if (vibrateEnabled) {
+            debugVibrate();
+        }
+
+        if (countdownEnabled) {
+            startDebugCountdown(message);
+        }
+    }
+
+    private void showDebugReminderDialog(String message, boolean showCountdown) {
+        String dialogMessage = message;
+        if (showCountdown) {
+            dialogMessage = message + "\n\n10秒倒计时提醒即将开始...";
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("⏰ 打卡提醒 [Debug]")
+                .setMessage(dialogMessage)
+                .setPositiveButton("知道了", null)
+                .setCancelable(false)
+                .show();
+    }
+
+    private void debugVibrate() {
+        android.os.Vibrator vibrator = (android.os.Vibrator) getSystemService(VIBRATOR_SERVICE);
+        if (vibrator != null && vibrator.hasVibrator()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(android.os.VibrationEffect.createOneShot(2000, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
+            } else {
+                vibrator.vibrate(2000);
+            }
+        }
+    }
+
+    private android.os.CountDownTimer debugCountdownTimer;
+
+    private void startDebugCountdown(String message) {
+        if (debugCountdownTimer != null) {
+            debugCountdownTimer.cancel();
+        }
+
+        final long countdownMillis = SettingsActivity.getCountdownMillis(this);
+
+        debugCountdownTimer = new android.os.CountDownTimer(countdownMillis, countdownMillis) {
+            @Override
+            public void onTick(long millisUntilFinished) {}
+
+            @Override
+            public void onFinish() {
+                debugVibrate();
+                showDebugReminderDialog(message + " ⏰ 请立即打卡！", false);
+            }
+        }.start();
+    }
+
+    private void updateDebugUI() {
+        if (debugCurrentLocation == null) return;
+
+        String timeStr = new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+                .format(new java.util.Date());
+
+        tvDebugGPS.setText(String.format("GPS: %.6f, %.6f",
+                debugCurrentLocation.getLatitude(),
+                debugCurrentLocation.getLongitude()));
+        tvDebugTime.setText("更新时间: " + timeStr);
     }
 
     private void loadLocationsFromDatabase() {
@@ -379,15 +662,14 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
             }
         } else if (requestCode == BACKGROUND_LOCATION_REQUEST_CODE) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // Background location granted, now start the service
                 LocationMonitorService.startService(this);
                 LocationMonitorService.isServiceRunning = true;
+                switchServiceStatus.setChecked(true);
                 Toast.makeText(this, "位置监控已启动", Toast.LENGTH_LONG).show();
             } else {
                 Toast.makeText(this, "后台位置权限被拒绝，监控服务可能无法正常工作",
                         Toast.LENGTH_LONG).show();
             }
-            updateServiceStatus();
         }
     }
 

@@ -30,12 +30,13 @@
 ## ✨ 功能
 
 - **打卡地点管理**：添加、编辑、删除打卡地点，支持启用/禁用开关
-- **GPS 定位**：自动获取当前位置，也可手动输入经纬度
-- **地理围栏提醒**：进入/离开指定半径范围时自动提醒
+- **GPS 定位**：主动请求 GPS 获取当前位置，也可手动输入经纬度
+- **地理围栏提醒**：进入/离开指定半径范围时自动提醒，基于状态机避免重复提醒
 - **后台持续监控**：前台服务运行，手机重启后自动启动
 - **上下班时间范围**：可设置提醒生效的时间段，防止误报
-- **灵活提醒方式**：震动、弹窗、通知、倒计时（可配置）
+- **灵活提醒方式**：震动（2秒）、弹窗、通知、倒计时（可配置）
 - **设置页面**：自由开关提醒方式，自定义倒计时时长
+- **🐛 Debug 模式**：开启后首页显示 GPS 信息和实时距离，每 15 秒更新并触发提醒
 
 ## 🔧 技术栈
 
@@ -53,30 +54,40 @@
 ## 📦 项目结构
 
 ```
-app/src/main/
-├── AndroidManifest.xml
-├── java/com/example/helloworld/
-│   ├── MainActivity.java             # 主界面：打卡地点列表 + 服务控制
-│   ├── HelpActivity.java             # 使用说明页面
-│   ├── SettingsActivity.java         # 设置页面：震动/弹窗/通知/倒计时开关
-│   ├── CheckInLocation.java          # 打卡地点数据模型
-│   ├── CheckInLocationAdapter.java   # RecyclerView 适配器
-│   ├── CheckInLocationEntity.java    # Room 实体
-│   ├── CheckInLocationDao.java       # Room DAO
-│   ├── AppDatabase.java              # Room 数据库
-│   ├── LocationMonitorService.java   # 前台位置监控服务
-│   └── BootReceiver.java             # 开机自启动广播接收器
-└── res/
-    ├── layout/
-    │   ├── activity_main.xml           # 主界面布局
-    │   ├── activity_help.xml           # 使用说明布局
-    │   ├── activity_settings.xml       # 设置页面布局
-    │   ├── item_checkin_location.xml   # 打卡地点列表项
-    │   └── dialog_add_location.xml     # 添加/编辑打卡点对话框
-    └── values/
-        ├── strings.xml
-        ├── colors.xml
-        └── themes.xml
+anzhuo/
+├── PLAN.md                           # 项目规划文档
+├── README.md                         # 项目说明（含截图）
+├── QWEN.md                           # AI 上下文文件
+├── CODE_LOGIC.md                     # 代码逻辑详解
+├── images/                           # 应用截图
+│   ├── 主界面.jpg
+│   ├── 使用说明.jpg
+│   ├── 新增打卡点.jpg
+│   └── 设置.jpg
+└── app/src/main/
+    ├── AndroidManifest.xml
+    ├── java/com/example/helloworld/
+    │   ├── MainActivity.java             # 主界面：打卡地点列表 + 服务控制 + Debug模式
+    │   ├── HelpActivity.java             # 使用说明页面
+    │   ├── SettingsActivity.java         # 设置页面：5个开关（含Debug）
+    │   ├── CheckInLocation.java          # 打卡地点数据模型
+    │   ├── CheckInLocationAdapter.java   # RecyclerView 适配器
+    │   ├── CheckInLocationEntity.java    # Room 实体
+    │   ├── CheckInLocationDao.java       # Room DAO
+    │   ├── AppDatabase.java              # Room 数据库
+    │   ├── LocationMonitorService.java   # 前台位置监控服务
+    │   └── BootReceiver.java             # 开机自启动广播接收器
+    └── res/
+        ├── layout/
+        │   ├── activity_main.xml           # 主界面布局
+        │   ├── activity_help.xml           # 使用说明布局
+        │   ├── activity_settings.xml       # 设置页面布局
+        │   ├── item_checkin_location.xml   # 打卡地点列表项
+        │   └── dialog_add_location.xml     # 添加/编辑打卡点对话框
+        └── values/
+            ├── strings.xml
+            ├── colors.xml
+            └── themes.xml
 ```
 
 ## 🏗 构建
@@ -130,7 +141,7 @@ docker run --rm -v "$(pwd)":/project -v "$(pwd)/gradle-8.9":/opt/gradle-8.9 \
 | `FOREGROUND_SERVICE` | 前台位置监控服务 |
 | `FOREGROUND_SERVICE_LOCATION` | 前台服务使用位置信息 |
 | `RECEIVE_BOOT_COMPLETED` | 开机自启动监控服务 |
-| `VIBRATE` | 提醒时震动设备 |
+| `VIBRATE` | 提醒时震动设备（2秒） |
 
 ## 📄 许可证
 

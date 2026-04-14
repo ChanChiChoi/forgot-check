@@ -17,6 +17,7 @@ public class SettingsActivity extends Activity {
     private static final String KEY_NOTIFICATION = "notification_enabled";
     private static final String KEY_COUNTDOWN = "countdown_enabled";
     private static final String KEY_COUNTDOWN_SECONDS = "countdown_seconds";
+    private static final String KEY_DEBUG = "debug_enabled";
     private static final int DEFAULT_COUNTDOWN_SECONDS = 10;
 
     private SharedPreferences prefs;
@@ -32,6 +33,7 @@ public class SettingsActivity extends Activity {
         SwitchCompat switchPopup = findViewById(R.id.switchPopup);
         SwitchCompat switchNotification = findViewById(R.id.switchNotification);
         SwitchCompat switchCountdown = findViewById(R.id.switchCountdown);
+        SwitchCompat switchDebug = findViewById(R.id.switchDebug);
         TextInputEditText etCountdownSeconds = findViewById(R.id.etCountdownSeconds);
 
         // Load saved values (all default to true/enabled)
@@ -39,6 +41,7 @@ public class SettingsActivity extends Activity {
         switchPopup.setChecked(prefs.getBoolean(KEY_POPUP, true));
         switchNotification.setChecked(prefs.getBoolean(KEY_NOTIFICATION, true));
         switchCountdown.setChecked(prefs.getBoolean(KEY_COUNTDOWN, true));
+        switchDebug.setChecked(prefs.getBoolean(KEY_DEBUG, false));
 
         // Load countdown seconds (default 10)
         int savedSeconds = prefs.getInt(KEY_COUNTDOWN_SECONDS, DEFAULT_COUNTDOWN_SECONDS);
@@ -53,6 +56,8 @@ public class SettingsActivity extends Activity {
                 prefs.edit().putBoolean(KEY_NOTIFICATION, isChecked).apply());
         switchCountdown.setOnCheckedChangeListener((b, isChecked) ->
                 prefs.edit().putBoolean(KEY_COUNTDOWN, isChecked).apply());
+        switchDebug.setOnCheckedChangeListener((b, isChecked) ->
+                prefs.edit().putBoolean(KEY_DEBUG, isChecked).apply());
 
         // Save countdown seconds on text change
         etCountdownSeconds.setOnFocusChangeListener((v, hasFocus) -> {
@@ -124,5 +129,13 @@ public class SettingsActivity extends Activity {
                 .getInt(KEY_COUNTDOWN_SECONDS, DEFAULT_COUNTDOWN_SECONDS);
         if (seconds <= 0) seconds = DEFAULT_COUNTDOWN_SECONDS;
         return seconds * 1000L;
+    }
+
+    /**
+     * Helper: check if debug mode is enabled
+     */
+    public static boolean isDebugEnabled(Context context) {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getBoolean(KEY_DEBUG, false);
     }
 }

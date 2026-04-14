@@ -22,15 +22,16 @@
             android:background="?android:attr/selectableItemBackground"
             android:padding="8dp" />
 
-        <TextView
-            android:id="@+id/tvServiceStatus"
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switchServiceStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="end"
             android:layout_marginEnd="8dp"
-            android:text="监控: 未启动"
+            android:text="监控"
             android:textColor="#FFFFFF"
-            android:textSize="14sp" />
+            android:textSize="14sp"
+            android:thumbTint="#FFFFFF" />
 
         <Button
             android:id="@+id/btnSettings"
@@ -46,6 +47,36 @@
 
     </androidx.appcompat.widget.Toolbar>
 
+    <LinearLayout
+        android:id="@+id/layoutDebug"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/toolbar"
+        android:orientation="vertical"
+        android:background="#FFF8E1"
+        android:padding="12dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tvDebugGPS"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="GPS: 未获取"
+            android:textSize="13sp"
+            android:textColor="#333333"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvDebugTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="更新时间: --"
+            android:textSize="12sp"
+            android:textColor="#666666"
+            android:layout_marginTop="2dp" />
+
+    </LinearLayout>
+
     <TextView
         android:id="@+id/tvEmpty"
         android:layout_width="wrap_content"
@@ -60,7 +91,8 @@
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_below="@id/toolbar"
+        android:layout_below="@id/layoutDebug"
+        android:layout_above="@id/fabAdd"
         android:padding="8dp"
         android:clipToPadding="false" />
 
