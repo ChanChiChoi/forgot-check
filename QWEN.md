@@ -44,17 +44,24 @@
 - **15-second polling interval**: `CHECK_INTERVAL_MS` changed from 30,000 to **15,000** ms.
 - **Always-on GPS polling**: Service always requests GPS every 15s when running. **No time window filtering on GPS requests** — status is always updated. Only the **reminder trigger** is gated by time window checks.
 - **When service stops** (`onDestroy`): Calls `removeUpdates()` — **completely silent**, no GPS requests at all.
-- **Toolbar service status**: Replaced text label ("监控: 运行中"/"监控: 未启动") with a **`SwitchCompat`** toggle switch. Toggling the switch starts/stops the service directly.
+- **Toolbar service status**: Replaced text label ("监控: 运行中"/"监控: 未启动") with a **`SwitchCompat`** toggle switch. Red when ON, grey when OFF.
 - **Vibration duration**: Changed from 500ms to **2000ms** (2 seconds) globally.
 - **Debug mode** (Settings → `🐛 Debug 模式`, default OFF):
   - When enabled: MainActivity shows yellow GPS info bar at top (coordinates + update time)
-  - GPS polling every **15 seconds** in MainActivity (active request, wait up to 8s)
+  - GPS polling every **15 seconds** in `HandlerThread` background thread (active request, wait up to 8s)
   - Each card shows `距离: XXX米` row
   - Geofence check on each GPS update: triggers reminder on **status change only** (same logic as Service)
   - Reminder respects all settings (vibration, popup, countdown); dialog shows `[Debug]` tag
   - Stops polling when Activity pauses or Debug is turned off
+  - **Mutual exclusion with Service**: enabling Debug auto-stops Service and disables the monitor switch; trying to enable Service while Debug is ON shows a toast and forces the switch OFF
+- **Bug fixes**:
+  - Bug #1: ANR fix — moved GPS wait loop from main thread to `HandlerThread`
+  - Bug #2: Card status sync — reload `locationList` from DB after status change
+  - Bug #3: Switch color — changed `android:thumbTint` to `app:thumbTint` for API 21 compat
+  - Bug #4: Debug GPS info empty — moved UI updates to main thread via `mainHandler.post()`
 - **Build convention**: Added "构建规范" section to PLAN.md — every change must produce a release APK.
 - **Code logic doc**: Created `CODE_LOGIC.md` — comprehensive walkthrough of all source files and logic.
+- **Bug log**: Created `bug-fix.md` — tracks all bug fixes with root cause analysis and fix details.
 - Built release APK: `忘打卡-v1.3-release.apk` ✅ LATEST
 
 ---
@@ -66,7 +73,7 @@ The service uses `requestLocationUpdates()` with a `LocationListener` instead of
 ### Polling Logic
 
 ```
-Service Started (右上角监控 ON)
+Service Started (右上角监控 ON, Debug OFF)
     ↓
 Every 15 seconds: checkLocations()
     ├── Request GPS (always)
@@ -79,6 +86,18 @@ Every 15 seconds: checkLocations()
 Service Stopped (右上角监控 OFF)
     ↓
 No GPS requests, no status updates, completely silent
+
+Debug Mode ON (Debug模式开启)
+    ↓
+Service is auto-stopped if running
+    ↓
+MainActivity polls GPS every 15s on HandlerThread
+    ├── Updates top GPS info bar on main thread
+    ├── Updates card distances on main thread
+    ├── Updates DB status and reloads locationList
+    └── Triggers reminders on status change (time window gated)
+
+⚠️ Debug and Service are MUTUALLY EXCLUSIVE — never run simultaneously
 ```
 
 ### Key Methods in `LocationMonitorService`
@@ -240,7 +259,8 @@ annotationProcessor 'androidx.room:room-compiler:2.6.1'
 | `AppDatabase.java` | Room database singleton (version 2, destructive migration) |
 | `LocationMonitorService.java` | Foreground service with active GPS polling, geofence, smart scheduling, reminders |
 | `BootReceiver.java` | BOOT_COMPLETED receiver to restart service |
-| `PLAN.md` | Full development roadmap (M1-M8, all complete) |
+| `PLAN.md` | Full development roadmap (M1-M8, v1.1-v1.3, all complete) |
+| `bug-fix.md` | Bug fix log with root cause analysis |
 
 ## APK Output Naming Convention
 

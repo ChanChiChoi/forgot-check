@@ -497,24 +497,23 @@ adapter.setCurrentLocation(gpsLocation)  ← 由 Debug 模式调用
 
 **同样不会每 15 秒重复提醒**。
 
-### 场景 3：同时开启 Service + Debug
+### 场景 3：Debug 和监控**互斥**，不会同时运行
 
-两者都会读写同一个数据库的 `status` 字段，可能出现竞争：
-- Service 15s 轮询一次
-- Debug 15s 轮询一次（仅当 Activity 在前台时）
-- 两者都可能更新 status → 可能触发两次提醒（各一次）
-
-**这可能导致重复提醒**（Service 和 Debug 各触发一次）。
+- 开启 Debug → 自动停止 Service，监控滑块强制 OFF
+- 在 Debug 开启状态下尝试打开监控 → Toast 提示 + 滑块自动回弹
+- 关闭 Debug → 用户可以手动打开监控
+- **不存在竞争冲突**
 
 ---
 
 ## 十、潜在问题与注意事项
 
-### 10.1 Service + Debug 同时运行时的竞争
+### 10.1 Service + Debug 互斥机制
 
-如果用户开启了 Service（监控运行中）同时又打开 Debug 模式：
-- 两个轮询可能交错更新同一个地点的 `status`
-- 可能触发两次提醒（Service 一次，Debug 一次）
+Debug 模式和 Service 互斥，**不会出现竞争问题**：
+- 开启 Debug 时自动停止 Service
+- 在 `updateDebugModeVisibility()` 中检查并停止 Service
+- 在监控开关的 `OnCheckedChangeListener` 中拦截 Debug 开启时的操作
 
 ### 10.2 Debug 模式下 onPause 停止
 

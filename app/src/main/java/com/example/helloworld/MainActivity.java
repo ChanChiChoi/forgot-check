@@ -93,6 +93,12 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
 
         // Service status switch click to toggle
         switchServiceStatus.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            // Prevent toggling service while debug mode is active
+            if (SettingsActivity.isDebugEnabled(MainActivity.this)) {
+                Toast.makeText(this, "Debug模式下请先关闭Debug再开启监控", Toast.LENGTH_SHORT).show();
+                switchServiceStatus.setChecked(false);
+                return;
+            }
             if (isChecked) {
                 // Start service
                 if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
@@ -268,6 +274,12 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
         layoutDebug.setVisibility(debugEnabled ? View.VISIBLE : View.GONE);
 
         if (debugEnabled) {
+            // Debug mode takes over: stop the service to avoid GPS competition
+            if (LocationMonitorService.isServiceRunning) {
+                LocationMonitorService.stopService(this);
+                LocationMonitorService.isServiceRunning = false;
+            }
+            switchServiceStatus.setChecked(false);
             startDebugLocation();
         } else {
             stopDebugLocation();
