@@ -425,14 +425,17 @@ public class LocationMonitorService extends Service {
 
             final long countdownMillis = SettingsActivity.getCountdownMillis(this);
 
-            try {
-                Uri alarmSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
-                android.media.Ringtone ringtone = RingtoneManager.getRingtone(this, alarmSound);
-                if (ringtone != null) {
-                    ringtone.play();
+            // Play alarm sound only if enabled AND system is not silent/vibrate
+            if (SettingsActivity.shouldPlayAlarmSound(this)) {
+                try {
+                    Uri alarmSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+                    android.media.Ringtone ringtone = RingtoneManager.getRingtone(this, alarmSound);
+                    if (ringtone != null) {
+                        ringtone.play();
+                    }
+                } catch (Exception e) {
+                    // Ignore
                 }
-            } catch (Exception e) {
-                // Ignore
             }
 
             int countdownSeconds = (int) (countdownMillis / 1000);

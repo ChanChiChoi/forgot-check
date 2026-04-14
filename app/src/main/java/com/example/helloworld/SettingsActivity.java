@@ -17,6 +17,7 @@ public class SettingsActivity extends Activity {
     private static final String KEY_NOTIFICATION = "notification_enabled";
     private static final String KEY_COUNTDOWN = "countdown_enabled";
     private static final String KEY_COUNTDOWN_SECONDS = "countdown_seconds";
+    private static final String KEY_ALARM_SOUND = "alarm_sound_enabled";
     private static final String KEY_DEBUG = "debug_enabled";
     private static final int DEFAULT_COUNTDOWN_SECONDS = 10;
 
@@ -33,14 +34,16 @@ public class SettingsActivity extends Activity {
         SwitchCompat switchPopup = findViewById(R.id.switchPopup);
         SwitchCompat switchNotification = findViewById(R.id.switchNotification);
         SwitchCompat switchCountdown = findViewById(R.id.switchCountdown);
+        SwitchCompat switchAlarmSound = findViewById(R.id.switchAlarmSound);
         SwitchCompat switchDebug = findViewById(R.id.switchDebug);
         TextInputEditText etCountdownSeconds = findViewById(R.id.etCountdownSeconds);
 
-        // Load saved values (all default to true/enabled)
+        // Load saved values (all default to true/enabled except debug)
         switchVibration.setChecked(prefs.getBoolean(KEY_VIBRATION, true));
         switchPopup.setChecked(prefs.getBoolean(KEY_POPUP, true));
         switchNotification.setChecked(prefs.getBoolean(KEY_NOTIFICATION, true));
         switchCountdown.setChecked(prefs.getBoolean(KEY_COUNTDOWN, true));
+        switchAlarmSound.setChecked(prefs.getBoolean(KEY_ALARM_SOUND, true));
         switchDebug.setChecked(prefs.getBoolean(KEY_DEBUG, false));
 
         // Load countdown seconds (default 10)
@@ -56,6 +59,8 @@ public class SettingsActivity extends Activity {
                 prefs.edit().putBoolean(KEY_NOTIFICATION, isChecked).apply());
         switchCountdown.setOnCheckedChangeListener((b, isChecked) ->
                 prefs.edit().putBoolean(KEY_COUNTDOWN, isChecked).apply());
+        switchAlarmSound.setOnCheckedChangeListener((b, isChecked) ->
+                prefs.edit().putBoolean(KEY_ALARM_SOUND, isChecked).apply());
         switchDebug.setOnCheckedChangeListener((b, isChecked) ->
                 prefs.edit().putBoolean(KEY_DEBUG, isChecked).apply());
 
@@ -137,5 +142,32 @@ public class SettingsActivity extends Activity {
     public static boolean isDebugEnabled(Context context) {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .getBoolean(KEY_DEBUG, false);
+    }
+
+    /**
+     * Check if alarm sound should play.
+     * Returns true only if:
+     * 1. The alarm sound toggle is enabled in settings, AND
+     * 2. System ringer mode is NORMAL (not silent or vibrate)
+     */
+    public static boolean shouldPlayAlarmSound(Context context) {
+        // First check if alarm sound is enabled in our settings
+        if (!context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getBoolean(KEY_ALARM_SOUND, true)) {
+            return false;
+        }
+
+        // Then check system ringer mode
+        android.media.AudioManager audioManager =
+                (android.media.AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+        if (audioManager == null) {
+            return false;
+        }
+
+        int ringerMode = audioManager.getRingerMode();
+        // RINGER_MODE_NORMAL = 2 (sound mode)
+        // RINGER_MODE_SILENT = 0
+        // RINGER_MODE_VIBRATE = 1
+        return ringerMode == android.media.AudioManager.RINGER_MODE_NORMAL;
     }
 }

@@ -6,6 +6,8 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
+import android.media.RingtoneManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -493,6 +495,19 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
         }
 
         final long countdownMillis = SettingsActivity.getCountdownMillis(this);
+
+        // Play alarm sound only if enabled AND system is not silent/vibrate
+        if (SettingsActivity.shouldPlayAlarmSound(this)) {
+            try {
+                Uri alarmSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+                android.media.Ringtone ringtone = RingtoneManager.getRingtone(this, alarmSound);
+                if (ringtone != null) {
+                    ringtone.play();
+                }
+            } catch (Exception e) {
+                // Ignore
+            }
+        }
 
         debugCountdownTimer = new android.os.CountDownTimer(countdownMillis, countdownMillis) {
             @Override

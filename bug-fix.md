@@ -50,11 +50,34 @@ Debug 模式下，顶部 GPS 信息栏显示当前位置距离打卡点 **7 米*
 
 ### 根因分析
 
-`checkDebugGeofence()` 方法确实计算了距离并更新了数据库中的状态，但 `MainActivity` 内存中的 `locationList` 只在启动时加载了一次，之后从未刷新。导致适配器显示的始终是旧的内存数据。
+`checkDebugGeofence()` 方法确实计算了距离并更新了数据库中的状态：
+
+```java
+// 数据库中的状态已更新为 "inside"
+database.locationDao().updateStatus(entity.id, "inside");
+```
+
+但 `MainActivity` 中 `RecyclerView` 使用的 `locationList` 只在 `onCreate()` 时从数据库加载了一次：
+
+```java
+// onCreate() 中只加载一次
+loadLocationsFromDatabase();
+
+// 之后 checkDebugGeofence() 只更新 DB，没有刷新 locationList
+```
+
+导致适配器显示的始终是旧的内存数据，即使 DB 已更新为 `inside`，卡片仍显示 `outside` 或 `unknown`。
 
 ### 修复方案
 
-在 `checkDebugGeofence()` 中检测到状态变化后，调用 `loadLocationsFromDatabase()` 从数据库重新加载列表到内存。
+在 `checkDebugGeofence()` 中检测到状态变化后，调用 `loadLocationsFromDatabase()` 从数据库重新加载整个列表到内存：
+
+```java
+// checkDebugGeofence() 末尾：
+if (statusChanged) {
+    mainHandler.post(() -> loadLocationsFromDatabase());
+}
+```
 
 ### 涉及文件
 
@@ -124,5 +147,38 @@ mainHandler.post(() -> {
 ### 涉及文件
 
 - `MainActivity.java`
+
+---
+
+## v1.4 新增功能：闹铃声音提醒开关
+
+**发布时间**: 2026-04-14
+**功能编号**: PLAN.md 功能清单 #3.3
+
+### 功能描述
+
+设置页面新增「🔔 闹铃声音」开关（默认开启），控制提醒时是否播放闹铃声音。
+
+### 实现逻辑
+
+播放闹铃声音需要**同时满足两个条件**：
+1. 闹铃声音开关在设置中为 **开启** 状态
+2. 系统铃声模式为 **正常**（`RINGER_MODE_NORMAL`），即非静音、非震动模式
+
+```
+shouldPlayAlarmSound(context):
+    ├── 检查设置中闹铃开关 → 关闭则返回 false
+    └── 检查系统 AudioManager.getRingerMode()
+        ├── RINGER_MODE_NORMAL (2) → 返回 true ✅ 播放闹铃
+        ├── RINGER_MODE_VIBRATE (1) → 返回 false ❌ 系统震动模式，不播放
+        └── RINGER_MODE_SILENT (0)  → 返回 false ❌ 系统静音，不播放
+```
+
+### 涉及文件
+
+- `SettingsActivity.java` — 新增 `KEY_ALARM_SOUND`、开关 UI、`shouldPlayAlarmSound()` 方法
+- `activity_settings.xml` — 新增闹铃声音开关项
+- `LocationMonitorService.java` — `startCountdownTimer()` 中闹铃播放前增加 `shouldPlayAlarmSound()` 检查
+- `MainActivity.java` — `startDebugCountdown()` 中同样增加检查，新增 `RingtoneManager`、`Uri` 导入
 
 ---

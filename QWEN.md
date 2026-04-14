@@ -36,6 +36,7 @@
 | **v1.1** | 时间范围设置 + 使用说明页面 | ✅ DONE | `app-debug-v1.1.apk` |
 | **v1.2** | 设置页面（震动/弹窗/通知/倒计时开关） | ✅ DONE | `忘打卡-v1.2-release.apk` |
 | **v1.3** | 主动GPS请求 + 智能轮询 + 滑块UI + Debug模式 + 震动2s | ✅ DONE | `忘打卡-v1.3-release.apk` |
+| **v1.4** | 闹铃声音提醒开关（检测系统铃声模式） | ✅ DONE | `忘打卡-v1.4-release.apk` |
 
 ### M1-M7 (v1.0, v1.1, v1.2) — See previous QWEN.md for details
 
@@ -62,7 +63,15 @@
 - **Build convention**: Added "构建规范" section to PLAN.md — every change must produce a release APK.
 - **Code logic doc**: Created `CODE_LOGIC.md` — comprehensive walkthrough of all source files and logic.
 - **Bug log**: Created `bug-fix.md` — tracks all bug fixes with root cause analysis and fix details.
-- Built release APK: `忘打卡-v1.3-release.apk` ✅ LATEST
+- Built release APK: `忘打卡-v1.3-release.apk` ✅
+
+### v1.4 Completed (2026-04-14)
+- **Alarm sound toggle**: New `🔔 闹铃声音` switch in Settings (default: ON)
+- **System ringer mode check**: `shouldPlayAlarmSound()` checks both the settings toggle AND `AudioManager.getRingerMode()`
+  - `RINGER_MODE_NORMAL` → play alarm sound ✅
+  - `RINGER_MODE_SILENT` / `RINGER_MODE_VIBRATE` → skip alarm sound ❌
+- Applied to both `LocationMonitorService.startCountdownTimer()` and `MainActivity.startDebugCountdown()`
+- Built release APK: `忘打卡-v1.4-release.apk` ✅ LATEST
 
 ---
 
@@ -269,5 +278,6 @@ annotationProcessor 'androidx.room:room-compiler:2.6.1'
 | `app-debug-m1.apk` ... `m8.apk` | Milestone debug builds |
 | `app-debug-v1.1.apk` | v1.1 debug build |
 | `app-debug-v1.3.apk` | v1.3 debug build |
-| `忘打卡-v1.3-release.apk` | **v1.3 release: Active GPS + Smart Polling + Debug Mode (LATEST)** |
+| `忘打卡-v1.3-release.apk` | v1.3 release (outdated) |
+| `忘打卡-v1.4-release.apk` | **v1.4 release: Alarm Sound Toggle (LATEST)** |
 | `忘打卡-v1.2-release.apk` | v1.2 release (outdated) |
