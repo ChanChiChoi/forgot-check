@@ -31,7 +31,9 @@
             <androidx.appcompat.widget.SwitchCompat
                 android:id="@+id/switchEnabled"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
+                android:layout_height="wrap_content"
+                android:thumbTint="@color/switch_thumb_color"
+                android:trackTint="@color/switch_track_color" />
 
         </LinearLayout>
 
