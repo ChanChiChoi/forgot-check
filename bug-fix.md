@@ -182,3 +182,94 @@ shouldPlayAlarmSound(context):
 - `MainActivity.java` — `startDebugCountdown()` 中同样增加检查，新增 `RingtoneManager`、`Uri` 导入
 
 ---
+
+## v1.4.1 Bug Fixes (2026-04-15)
+
+### Bug #5: 倒计时结束后没有触发第二次提醒
+
+**发现时间**: 2026-04-15
+**严重程度**: 高（倒计时提醒功能完全失效，用户错过打卡提醒）
+
+#### 问题描述
+
+停留在 App 主界面时，触发地理围栏提醒后弹窗显示"10秒倒计时提醒即将开始..."，用户点击"知道了"关闭对话框后，10秒倒计时结束，但没有任何后续提醒（没有震动、没有通知、没有二次弹窗）。
+
+#### 根因分析
+
+`LocationMonitorService.showForegroundDialog()` 中，对话框的"知道了"按钮调用了 `countdownTimer.cancel()`：
+
+```java
+.setPositiveButton("知道了", (dialog, which) -> {
+    if (countdownTimer != null) {
+        countdownTimer.cancel();  // ← 倒计时被取消，onFinish() 永远不会执行
+    }
+    dialog.dismiss();
+})
+```
+
+用户点击"知道了"只是关闭了初始弹窗，但倒计时被同时取消，导致 `onFinish()` 中的二次提醒（震动 + 通知）永远不会触发。
+
+#### 修复方案
+
+移除 `countdownTimer.cancel()` 调用，让倒计时独立于对话框运行：
+
+```java
+.setPositiveButton("知道了", (dialog, which) -> {
+    // Do NOT cancel countdown timer — let it run to trigger follow-up reminder
+    dialog.dismiss();
+})
+```
+
+`MainActivity.showDebugReminderDialog()` 同样修复。
+
+#### 涉及文件
+
+- `LocationMonitorService.java`
+- `MainActivity.java`
+
+---
+
+### Bug #6: 后台运行时 GPS 轮询停止，状态不更新
+
+**发现时间**: 2026-04-15
+**严重程度**: 高（后台监控完全失效，用户离开/进入围栏时无任何提醒）
+
+#### 问题描述
+
+停留在 App 主界面或让 App 在后台运行时，即使进出电子围栏，卡片状态也不会变化。只有从通知栏点击进入 App 后，状态才会更新。
+
+#### 根因分析
+
+`LocationMonitorService` 使用 `HandlerThread` 每 15 秒轮询 GPS。当手机屏幕关闭后，Android 的 **Doze 模式** 会让 CPU 进入深度睡眠状态，`HandlerThread` 被挂起，GPS 请求不再执行。
+
+当用户从通知栏点击打开 App 时，屏幕亮起、CPU 唤醒，`HandlerThread` 恢复运行，此时才会执行一次 GPS 轮询并更新状态。
+
+#### 修复方案
+
+使用 `PowerManager.WakeLock`（`PARTIAL_WAKE_LOCK`）在每次 GPS 轮询期间保持 CPU 唤醒：
+
+1. **`onCreate()`**: 创建 WakeLock 实例
+2. **`checkLocations()` 开始**: 获取 WakeLock（`wakeLock.acquire(30_000)`，30 秒超时作为安全保护）
+3. **`checkLocations()` 结束**: 释放 WakeLock
+4. **异常/无位置**: 提前返回时也释放 WakeLock
+5. **`onDestroy()`**: 确保 WakeLock 被释放
+6. **`AndroidManifest.xml`**: 添加 `WAKE_LOCK` 权限
+
+```
+checkLocations()
+    ↓
+    wakeLock.acquire(30_000)  ← 保持 CPU 唤醒
+    ↓
+    请求 GPS → 等待 → 计算距离 → 更新状态 → 触发提醒
+    ↓
+    wakeLock.release()  ← 释放，允许 CPU 睡眠
+```
+
+**电量影响**: WakeLock 只在每次 15 秒 GPS 轮询期间持有（通常 < 1 秒），对电量影响极小。
+
+#### 涉及文件
+
+- `LocationMonitorService.java`
+- `AndroidManifest.xml`
+
+---

@@ -21,6 +21,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 
@@ -68,6 +69,7 @@ public class LocationMonitorService extends Service {
 
     private LocationManager locationManager;
     private AppDatabase database;
+    private PowerManager.WakeLock wakeLock;
 
     // Active GPS location listener
     private LocationListener locationListener;
@@ -89,6 +91,13 @@ public class LocationMonitorService extends Service {
         database = AppDatabase.getInstance(this);
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         mainHandler = new Handler(Looper.getMainLooper());
+
+        // WakeLock to keep CPU awake for GPS polling when screen is off
+        PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
+        wakeLock = powerManager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "WangDaKa::LocationPoll"
+        );
 
         createNotificationChannel();
 
@@ -147,6 +156,10 @@ public class LocationMonitorService extends Service {
         }
         if (currentDialog != null && currentDialog.isShowing()) {
             currentDialog.dismiss();
+        }
+        // Release WakeLock
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release();
         }
     }
 
@@ -220,6 +233,11 @@ public class LocationMonitorService extends Service {
             return;
         }
 
+        // Acquire WakeLock to keep CPU awake during GPS polling (screen-off scenario)
+        if (wakeLock != null && !wakeLock.isHeld()) {
+            wakeLock.acquire(30_000); // Max 30 seconds timeout safeguard
+        }
+
         // Actively request current GPS location (blocking call with timeout)
         Location location = null;
         try {
@@ -246,10 +264,18 @@ public class LocationMonitorService extends Service {
                 location = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
             }
         } catch (Exception e) {
+            // Release WakeLock on exception
+            if (wakeLock != null && wakeLock.isHeld()) {
+                wakeLock.release();
+            }
             return;
         }
 
         if (location == null) {
+            // Release WakeLock if no location obtained
+            if (wakeLock != null && wakeLock.isHeld()) {
+                wakeLock.release();
+            }
             return;
         }
 
@@ -298,6 +324,11 @@ public class LocationMonitorService extends Service {
                     }
                 }
             }
+        }
+
+        // Release WakeLock after all processing is done
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release();
         }
     }
 
@@ -358,9 +389,7 @@ public class LocationMonitorService extends Service {
                 .setTitle("⏰ 打卡提醒")
                 .setMessage(dialogMessage)
                 .setPositiveButton("知道了", (dialog, which) -> {
-                    if (countdownTimer != null) {
-                        countdownTimer.cancel();
-                    }
+                    // Do NOT cancel countdown timer — let it run to trigger follow-up reminder
                     dialog.dismiss();
                 })
                 .setCancelable(false)

@@ -471,7 +471,10 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
         new AlertDialog.Builder(this)
                 .setTitle("⏰ 打卡提醒 [Debug]")
                 .setMessage(dialogMessage)
-                .setPositiveButton("知道了", null)
+                .setPositiveButton("知道了", (dialog, which) -> {
+                    // Do NOT cancel countdown timer — let it run to trigger follow-up reminder
+                    dialog.dismiss();
+                })
                 .setCancelable(false)
                 .show();
     }

@@ -37,6 +37,7 @@
 - **灵活提醒方式**：震动（2秒）、弹窗、通知、倒计时（可配置）
 - **设置页面**：自由开关提醒方式，自定义倒计时时长
 - **🐛 Debug 模式**：开启后首页显示 GPS 信息和实时距离，每 15 秒更新并触发提醒，与后台监控互斥（不能同时开启）
+- **WakeLock 保活**：后台 GPS 轮询期间保持 CPU 唤醒，避免 Doze 模式导致监控失效
 
 ## 🔧 技术栈
 
@@ -142,6 +143,7 @@ docker run --rm -v "$(pwd)":/project -v "$(pwd)/gradle-8.9":/opt/gradle-8.9 \
 | `FOREGROUND_SERVICE_LOCATION` | 前台服务使用位置信息 |
 | `RECEIVE_BOOT_COMPLETED` | 开机自启动监控服务 |
 | `VIBRATE` | 提醒时震动设备（2秒） |
+| `WAKE_LOCK` | 后台 GPS 轮询期间保持 CPU 唤醒 |
 
 ## 📄 许可证
 

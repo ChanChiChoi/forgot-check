@@ -71,7 +71,21 @@
   - `RINGER_MODE_NORMAL` → play alarm sound ✅
   - `RINGER_MODE_SILENT` / `RINGER_MODE_VIBRATE` → skip alarm sound ❌
 - Applied to both `LocationMonitorService.startCountdownTimer()` and `MainActivity.startDebugCountdown()`
-- Built release APK: `忘打卡-v1.4-release.apk` ✅ LATEST
+- Built release APK: `忘打卡-v1.4-release.apk`
+
+### v1.4.1 Completed (2026-04-15)
+- **Bug #5 fix: Countdown timer not triggering after dialog dismissal**:
+  - `showForegroundDialog()`: Removed `countdownTimer.cancel()` from "知道了" button — countdown now runs independently of dialog
+  - `showDebugReminderDialog()`: Same fix for debug mode
+  - Result: 10-second countdown now correctly triggers follow-up reminder (vibration + notification) after user closes initial dialog
+- **Bug #6 fix: GPS polling stops when screen is off (Doze mode)**:
+  - Added `PowerManager.WakeLock` (`PARTIAL_WAKE_LOCK`) to `LocationMonitorService`
+  - WakeLock acquired at start of `checkLocations()`, released at end
+  - 30-second timeout safeguard on `acquire()` call
+  - Proper release on all exit paths (exception, null location, `onDestroy()`)
+  - Added `WAKE_LOCK` permission to `AndroidManifest.xml`
+  - Result: Service now correctly polls GPS every 15s even when screen is off
+- Built release APK: `忘打卡-v1.4.1-release.apk` ✅ LATEST
 
 ---
 
@@ -249,6 +263,7 @@ annotationProcessor 'androidx.room:room-compiler:2.6.1'
 | `FOREGROUND_SERVICE_LOCATION` | Foreground service with location type |
 | `RECEIVE_BOOT_COMPLETED` | Auto-start monitoring on device boot |
 | `VIBRATE` | Vibrate device on reminder |
+| `WAKE_LOCK` | Keep CPU awake for GPS polling when screen is off |
 
 ## Important Files Reference
 
