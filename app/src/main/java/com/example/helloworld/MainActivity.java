@@ -65,6 +65,10 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
     private boolean pendingStartServiceAfterPermission;
     private boolean ignoreServiceSwitchCallback;
 
+    // Periodic refresh
+    private Handler refreshHandler;
+    private Runnable refreshRunnable;
+
     // Database
     private AppDatabase database;
     private ExecutorService executorService;
@@ -158,6 +162,7 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
 
         // Initialize debug mode
         debugHandler = new Handler(Looper.getMainLooper());
+        refreshHandler = new Handler(Looper.getMainLooper());
         debugLocationManager = (android.location.LocationManager) getSystemService(LOCATION_SERVICE);
         debugLocationListener = new android.location.LocationListener() {
             @Override
@@ -191,6 +196,31 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
         };
 
         updateDebugModeVisibility();
+
+        // Start periodic refresh
+        startPeriodicRefresh();
+    }
+
+    private void startPeriodicRefresh() {
+        if (refreshRunnable != null) {
+            refreshHandler.removeCallbacks(refreshRunnable);
+        }
+        refreshRunnable = new Runnable() {
+            @Override
+            public void run() {
+                updateServiceStatus();
+                updatePermissionWarning();
+                refreshHandler.postDelayed(this, 10_000);
+            }
+        };
+        refreshHandler.post(refreshRunnable);
+    }
+
+    private void stopPeriodicRefresh() {
+        if (refreshRunnable != null) {
+            refreshHandler.removeCallbacks(refreshRunnable);
+            refreshRunnable = null;
+        }
     }
 
     @Override
@@ -200,6 +230,7 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
         updateDebugModeVisibility();
         updatePermissionWarning();
         updateMonitorStatusText();
+        startPeriodicRefresh();
 
         if (pendingStartServiceAfterPermission && hasRequiredMonitoringPermissions()) {
             pendingStartServiceAfterPermission = false;
@@ -212,6 +243,7 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
         super.onPause();
         // Stop debug location updates when activity is paused
         stopDebugLocation();
+        stopPeriodicRefresh();
     }
 
     private void requestPermissions() {
@@ -316,6 +348,7 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
         LocationMonitorService.startService(this);
         LocationMonitorService.isServiceRunning = true;
         setServiceSwitchChecked(true);
+        updateMonitorStatusText();
         Toast.makeText(this, "位置监控已启动", Toast.LENGTH_LONG).show();
     }
 
