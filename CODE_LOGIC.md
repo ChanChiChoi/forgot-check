@@ -133,7 +133,8 @@ onCreate()
 
 onResume()
     ├── updateServiceStatus()
-    └── updateDebugModeVisibility() ← 如果 Debug ON 则开始 GPS 轮询
+    ├── updateDebugModeVisibility() ← 如果 Debug ON 则开始 GPS 轮询
+    └── updatePermissionWarning() ← 缺少后台定位时显示顶部提示；若刚从设置页返回且权限已补齐，则继续启动 Service
 
 onPause()
     └── stopDebugLocation() ← 暂停时停止 Debug GPS（省电）
@@ -147,10 +148,14 @@ onPause()
 setOnCheckedChangeListener(isChecked)
     ↓
     isChecked = true:
-        ├── 检查 ACCESS_FINE_LOCATION 权限 → 无则请求权限，回退 switch
-        ├── 检查 ACCESS_BACKGROUND_LOCATION (Android 10+) → 无则请求
-        ├── LocationMonitorService.startService()
-        ├── isServiceRunning = true
+        ├── startMonitoringServiceWithPermissionCheck()
+        │   ├── 检查 ACCESS_FINE_LOCATION → 无则请求权限，回退 switch
+        │   ├── 检查 ACCESS_BACKGROUND_LOCATION
+        │   │   ├── Android 10: 直接请求运行时后台定位权限
+        │   │   └── Android 11+: 跳系统应用设置页，要求用户改成“始终允许”
+        │   ├── onResume() 时重新检查权限
+        │   └── 权限齐全后 startMonitoringService()
+        ├── 顶部显示/隐藏后台定位权限提示条
         └── Toast "位置监控已启动"
     ↓
     isChecked = false:
@@ -158,6 +163,11 @@ setOnCheckedChangeListener(isChecked)
         ├── isServiceRunning = false
         └── Toast "位置监控已停止"
 ```
+
+**Android 11+ 关键细节**:
+- 仅有前台定位权限时，前台界面里的定位可以成功，但 `LocationMonitorService` 退到后台后可能拿不到位置更新
+- 这会表现为：监控通知存在，但状态不刷新；一旦点击通知回到 `MainActivity`，马上能定位并触发提醒
+- 主界面顶部 `layoutPermissionWarning` 用于显式提示这种权限缺口，避免误判成 15 秒轮询定时器失效
 
 ### 4.3 Debug 模式 GPS 轮询（重点）
 

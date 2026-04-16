@@ -50,32 +50,90 @@
     </androidx.appcompat.widget.Toolbar>
 
     <LinearLayout
-        android:id="@+id/layoutDebug"
+        android:id="@+id/layoutTopStatus"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_below="@id/toolbar"
         android:orientation="vertical"
-        android:background="#FFF8E1"
-        android:padding="12dp"
-        android:visibility="gone">
+        android:visibility="visible">
 
         <TextView
-            android:id="@+id/tvDebugGPS"
-            android:layout_width="wrap_content"
+            android:id="@+id/tvMonitorStatus"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="GPS: 未获取"
-            android:textSize="13sp"
-            android:textColor="#333333"
-            android:textStyle="bold" />
+            android:background="#E3F2FD"
+            android:paddingLeft="12dp"
+            android:paddingTop="8dp"
+            android:paddingRight="12dp"
+            android:paddingBottom="8dp"
+            android:text="监控状态：未启动"
+            android:textColor="#0D47A1"
+            android:textSize="12sp" />
 
-        <TextView
-            android:id="@+id/tvDebugTime"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:id="@+id/layoutPermissionWarning"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="更新时间: --"
-            android:textSize="12sp"
-            android:textColor="#666666"
-            android:layout_marginTop="2dp" />
+            android:orientation="horizontal"
+            android:background="#FFF3E0"
+            android:gravity="center_vertical"
+            android:padding="12dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tvPermissionWarning"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="后台监控需要“始终允许”位置权限"
+                android:textSize="12sp"
+                android:textColor="#8A4B00" />
+
+            <Button
+                android:id="@+id/btnPermissionWarningAction"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:minWidth="0dp"
+                android:text="去设置"
+                android:textSize="12sp"
+                android:textColor="#BF360C"
+                android:background="?android:attr/selectableItemBackground"
+                android:paddingLeft="8dp"
+                android:paddingTop="4dp"
+                android:paddingRight="8dp"
+                android:paddingBottom="4dp" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/layoutDebug"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#FFF8E1"
+            android:padding="12dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tvDebugGPS"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="GPS: 未获取"
+                android:textSize="13sp"
+                android:textColor="#333333"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvDebugTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="更新时间: --"
+                android:textSize="12sp"
+                android:textColor="#666666"
+                android:layout_marginTop="2dp" />
+
+        </LinearLayout>
 
     </LinearLayout>
 
@@ -93,7 +151,7 @@
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_below="@id/layoutDebug"
+        android:layout_below="@id/layoutTopStatus"
         android:layout_above="@id/fabAdd"
         android:padding="8dp"
         android:clipToPadding="false" />

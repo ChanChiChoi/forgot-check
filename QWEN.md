@@ -85,6 +85,13 @@
   - Proper release on all exit paths (exception, null location, `onDestroy()`)
   - Added `WAKE_LOCK` permission to `AndroidManifest.xml`
   - Result: Service now correctly polls GPS every 15s even when screen is off
+- **Post-v1.4.1 Android 14 fix: background location permission flow**:
+  - Root cause of the latest bug was not the 15s scheduler itself, but Android 11+ background location rules
+  - If the app only had foreground location permission, service polling appeared dead in background; tapping the ongoing notification brought `MainActivity` to foreground, and location immediately worked again
+  - `MainActivity` now separates "start monitoring" permission flow from "get current location" permission flow
+  - On Android 11+, enabling monitoring without `ACCESS_BACKGROUND_LOCATION` now sends the user to system app settings to grant "Always allow"
+  - Returning from Settings auto-starts the service if permissions are complete
+  - Main screen now shows a warning banner when background location is still missing
 - Built release APK: `忘打卡-v1.4.1-release.apk` ✅ LATEST
 
 ---
@@ -97,6 +104,11 @@ The service uses `requestLocationUpdates()` with a `LocationListener` instead of
 
 ```
 Service Started (右上角监控 ON, Debug OFF)
+    ↓
+Requires:
+    - ACCESS_FINE_LOCATION granted
+    - Android 10+: ACCESS_BACKGROUND_LOCATION granted
+    - Android 11+: app Location permission set to "Allow all the time"
     ↓
 Every 15 seconds: checkLocations()
     ├── Request GPS (always)

@@ -35,6 +35,7 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity implements CheckInLocationAdapter.OnLocationActionListener {
 
+    private static final int SERVICE_LOCATION_PERMISSION_REQUEST_CODE = 1000;
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1001;
     private static final int NOTIFICATION_PERMISSION_REQUEST_CODE = 1002;
     private static final int BACKGROUND_LOCATION_REQUEST_CODE = 1003;
@@ -42,13 +43,16 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
 
     private RecyclerView recyclerView;
     private TextView tvEmpty;
+    private TextView tvMonitorStatus;
     private androidx.appcompat.widget.SwitchCompat switchServiceStatus;
     private FloatingActionButton fabAdd;
     private CheckInLocationAdapter adapter;
     private List<CheckInLocation> locationList = new ArrayList<>();
 
     // Debug mode fields
+    private android.widget.LinearLayout layoutPermissionWarning;
     private android.widget.LinearLayout layoutDebug;
+    private TextView tvPermissionWarning;
     private TextView tvDebugGPS;
     private TextView tvDebugTime;
     private Handler debugHandler;
@@ -58,6 +62,8 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
     private android.location.LocationListener debugLocationListener;
     private volatile android.location.Location debugCurrentLocation;
     private Runnable debugLocationRunnable;
+    private boolean pendingStartServiceAfterPermission;
+    private boolean ignoreServiceSwitchCallback;
 
     // Database
     private AppDatabase database;
@@ -79,52 +85,41 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
 
         recyclerView = findViewById(R.id.recyclerView);
         tvEmpty = findViewById(R.id.tvEmpty);
+        tvMonitorStatus = findViewById(R.id.tvMonitorStatus);
         switchServiceStatus = findViewById(R.id.switchServiceStatus);
         fabAdd = findViewById(R.id.fabAdd);
 
         // Debug views
+        layoutPermissionWarning = findViewById(R.id.layoutPermissionWarning);
         layoutDebug = findViewById(R.id.layoutDebug);
+        tvPermissionWarning = findViewById(R.id.tvPermissionWarning);
         tvDebugGPS = findViewById(R.id.tvDebugGPS);
         tvDebugTime = findViewById(R.id.tvDebugTime);
+        Button btnPermissionWarningAction = findViewById(R.id.btnPermissionWarningAction);
 
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         adapter = new CheckInLocationAdapter(this);
         recyclerView.setAdapter(adapter);
 
         fabAdd.setOnClickListener(v -> showAddLocationDialog());
+        btnPermissionWarningAction.setOnClickListener(v -> openAppSettings());
 
         // Service status switch click to toggle
         switchServiceStatus.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (ignoreServiceSwitchCallback) {
+                return;
+            }
+
             // Prevent toggling service while debug mode is active
             if (SettingsActivity.isDebugEnabled(MainActivity.this)) {
                 Toast.makeText(this, "Debug模式下请先关闭Debug再开启监控", Toast.LENGTH_SHORT).show();
-                switchServiceStatus.setChecked(false);
+                setServiceSwitchChecked(false);
                 return;
             }
             if (isChecked) {
-                // Start service
-                if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                        != PackageManager.PERMISSION_GRANTED) {
-                    ActivityCompat.requestPermissions(this,
-                            new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                            LOCATION_PERMISSION_REQUEST_CODE);
-                    switchServiceStatus.setChecked(false);
-                    return;
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-                            != PackageManager.PERMISSION_GRANTED) {
-                        ActivityCompat.requestPermissions(this,
-                                new String[]{Manifest.permission.ACCESS_BACKGROUND_LOCATION},
-                                BACKGROUND_LOCATION_REQUEST_CODE);
-                        switchServiceStatus.setChecked(false);
-                        return;
-                    }
-                }
-                LocationMonitorService.startService(this);
-                LocationMonitorService.isServiceRunning = true;
-                Toast.makeText(this, "位置监控已启动", Toast.LENGTH_LONG).show();
+                startMonitoringServiceWithPermissionCheck();
             } else {
+                pendingStartServiceAfterPermission = false;
                 LocationMonitorService.stopService(this);
                 LocationMonitorService.isServiceRunning = false;
                 Toast.makeText(this, "位置监控已停止", Toast.LENGTH_SHORT).show();
@@ -152,6 +147,7 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
         updateEmptyView();
         updateServiceStatus();
         requestPermissions();
+        updateMonitorStatusText();
 
         // Initialize database
         database = AppDatabase.getInstance(this);
@@ -202,6 +198,13 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
         super.onResume();
         updateServiceStatus();
         updateDebugModeVisibility();
+        updatePermissionWarning();
+        updateMonitorStatusText();
+
+        if (pendingStartServiceAfterPermission && hasRequiredMonitoringPermissions()) {
+            pendingStartServiceAfterPermission = false;
+            startMonitoringService();
+        }
     }
 
     @Override
@@ -255,6 +258,7 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
                     Toast.makeText(this, "未授予悬浮窗权限，后台提醒可能无法显示弹窗",
                             Toast.LENGTH_LONG).show();
                 }
+                updateMonitorStatusText();
             }
         }
     }
@@ -263,9 +267,134 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
         switchServiceStatus.setChecked(!switchServiceStatus.isChecked());
     }
 
+    private void openAppSettings() {
+        Intent intent = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                android.net.Uri.parse("package:" + getPackageName()));
+        startActivity(intent);
+    }
+
+    private boolean hasFineLocationPermission() {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean hasBackgroundLocationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return true;
+        }
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean hasRequiredMonitoringPermissions() {
+        return hasFineLocationPermission() && hasBackgroundLocationPermission();
+    }
+
+    private void startMonitoringServiceWithPermissionCheck() {
+        pendingStartServiceAfterPermission = true;
+
+        if (!hasFineLocationPermission()) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                    SERVICE_LOCATION_PERMISSION_REQUEST_CODE);
+            setServiceSwitchChecked(false);
+            return;
+        }
+
+        if (!hasBackgroundLocationPermission()) {
+            requestBackgroundLocationPermission();
+            setServiceSwitchChecked(false);
+            updatePermissionWarning();
+            return;
+        }
+
+        pendingStartServiceAfterPermission = false;
+        startMonitoringService();
+    }
+
+    private void startMonitoringService() {
+        LocationMonitorService.startService(this);
+        LocationMonitorService.isServiceRunning = true;
+        setServiceSwitchChecked(true);
+        Toast.makeText(this, "位置监控已启动", Toast.LENGTH_LONG).show();
+    }
+
+    private void requestBackgroundLocationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return;
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Toast.makeText(this,
+                    "Android 11+ 需要在系统设置里把位置权限改成“始终允许”，后台监控才能工作",
+                    Toast.LENGTH_LONG).show();
+            openAppSettings();
+        } else {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.ACCESS_BACKGROUND_LOCATION},
+                    BACKGROUND_LOCATION_REQUEST_CODE);
+        }
+    }
+
     private void updateServiceStatus() {
         boolean running = LocationMonitorService.isServiceRunning;
-        switchServiceStatus.setChecked(running);
+        setServiceSwitchChecked(running);
+        updateMonitorStatusText();
+    }
+
+    private void updatePermissionWarning() {
+        if (layoutPermissionWarning == null || tvPermissionWarning == null) {
+            return;
+        }
+
+        boolean missingBackgroundPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                && !hasBackgroundLocationPermission();
+
+        if (!missingBackgroundPermission) {
+            layoutPermissionWarning.setVisibility(View.GONE);
+            updateMonitorStatusText();
+            return;
+        }
+
+        layoutPermissionWarning.setVisibility(View.VISIBLE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            tvPermissionWarning.setText("后台监控需要在系统设置中将位置权限改为“始终允许”");
+        } else {
+            tvPermissionWarning.setText("后台监控需要允许后台位置权限，否则退到后台后不会轮询");
+        }
+        updateMonitorStatusText();
+    }
+
+    private void updateMonitorStatusText() {
+        if (tvMonitorStatus == null) {
+            return;
+        }
+
+        String status;
+        if (SettingsActivity.isDebugEnabled(this)) {
+            status = "监控状态：Debug 模式运行中，后台监控服务已关闭";
+        } else if (!hasFineLocationPermission()) {
+            status = "监控状态：缺少前台位置权限，无法开启监控";
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !hasBackgroundLocationPermission()) {
+            status = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                    ? "监控状态：缺少“始终允许”位置权限，退到后台后不会轮询"
+                    : "监控状态：缺少后台位置权限，退到后台后不会轮询";
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                && !android.provider.Settings.canDrawOverlays(this)) {
+            status = "监控状态：监控可运行，但缺少悬浮窗权限，后台只能发通知不能弹窗";
+        } else if (LocationMonitorService.isServiceRunning) {
+            status = "监控状态：运行中，每 15 秒轮询并更新打卡点状态";
+        } else {
+            status = "监控状态：未启动";
+        }
+
+        tvMonitorStatus.setText(status);
+    }
+
+    private void setServiceSwitchChecked(boolean checked) {
+        ignoreServiceSwitchCallback = true;
+        switchServiceStatus.setChecked(checked);
+        ignoreServiceSwitchCallback = false;
     }
 
     /**
@@ -281,7 +410,7 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
                 LocationMonitorService.stopService(this);
                 LocationMonitorService.isServiceRunning = false;
             }
-            switchServiceStatus.setChecked(false);
+            setServiceSwitchChecked(false);
             startDebugLocation();
         } else {
             stopDebugLocation();
@@ -712,7 +841,16 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
                                            @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
+        if (requestCode == SERVICE_LOCATION_PERMISSION_REQUEST_CODE) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                startMonitoringServiceWithPermissionCheck();
+            } else {
+                pendingStartServiceAfterPermission = false;
+                Toast.makeText(this, "需要位置权限才能开启监控", Toast.LENGTH_SHORT).show();
+                updatePermissionWarning();
+                updateMonitorStatusText();
+            }
+        } else if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 getCurrentLocation();
             } else {
@@ -721,13 +859,16 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
             }
         } else if (requestCode == BACKGROUND_LOCATION_REQUEST_CODE) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                LocationMonitorService.startService(this);
-                LocationMonitorService.isServiceRunning = true;
-                switchServiceStatus.setChecked(true);
-                Toast.makeText(this, "位置监控已启动", Toast.LENGTH_LONG).show();
+                pendingStartServiceAfterPermission = false;
+                startMonitoringService();
+                updatePermissionWarning();
+                updateMonitorStatusText();
             } else {
+                pendingStartServiceAfterPermission = false;
                 Toast.makeText(this, "后台位置权限被拒绝，监控服务可能无法正常工作",
                         Toast.LENGTH_LONG).show();
+                updatePermissionWarning();
+                updateMonitorStatusText();
             }
         }
     }

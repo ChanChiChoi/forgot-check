@@ -273,3 +273,50 @@ checkLocations()
 - `AndroidManifest.xml`
 
 ---
+
+### Bug #7: Android 14 上监控已开启，但退到后台后不轮询；点通知回前台才立即触发提醒
+
+**发现时间**: 2026-04-16
+**严重程度**: 高（Android 11+ / 14 上后台监控看似开启，实际无法获得位置更新）
+
+#### 问题描述
+
+在 Android 14 手机上安装 v1.4.1 后，用户开启主界面右上角的监控并将 App 置于后台，到了上班/下班时间范围内没有任何自动 GPS 轮询迹象，卡片状态也不刷新。
+
+但点击通知栏中的“正在监控打卡位置”进入 App 后，会立刻执行一次定位、刷新打卡点状态，并在满足条件时马上弹出前台提醒，倒计时提醒也能正常完成。
+
+#### 根因分析
+
+这次问题的核心不是 `LocationMonitorService.scheduleNextCheck()` 或 `WakeLock` 失效，而是 **Android 11+ 后台定位权限流程不完整**。
+
+`MainActivity` 在开启监控时虽然检查了 `ACCESS_BACKGROUND_LOCATION`，但在 Android 11+ 上，后台定位通常不能再依赖普通运行时弹窗稳定授予，用户必须到系统设置里把位置权限改成 **“始终允许”**。
+
+因此实际出现了下面的行为差异：
+
+1. **App 在前台**：已有 `ACCESS_FINE_LOCATION`，所以点开通知回到 `MainActivity` 后，前台定位立即成功
+2. **App 在后台**：没有真正的“始终允许”后台定位权限，`LocationMonitorService` 无法拿到新的位置更新
+
+这就表现成“监控通知在，但后台不轮询；一回前台马上恢复”。
+
+#### 修复方案
+
+在 `MainActivity` 中重构“开启监控”的权限流，并补充可见提示：
+
+1. 新增独立的 `SERVICE_LOCATION_PERMISSION_REQUEST_CODE`，将“开启监控”与“获取当前位置”两条权限流分开
+2. 新增 `startMonitoringServiceWithPermissionCheck()` / `hasRequiredMonitoringPermissions()` / `requestBackgroundLocationPermission()`
+3. Android 10：继续使用运行时请求 `ACCESS_BACKGROUND_LOCATION`
+4. Android 11+：直接跳转系统应用设置页，引导用户将位置权限改成“始终允许”
+5. 用户从设置页返回 `MainActivity.onResume()` 后，如果权限已补齐，则自动继续启动监控服务
+6. 主界面新增顶部权限提示条 `layoutPermissionWarning`，在缺少后台定位时明确提示“否则退到后台后不会轮询”
+7. 监控开关增加受控回写，避免 `setChecked()` 触发监听器递归，错误清掉待启动状态
+
+#### 涉及文件
+
+- `MainActivity.java`
+- `activity_main.xml`
+- `README.md`
+- `QWEN.md`
+- `PLAN.md`
+- `CODE_LOGIC.md`
+
+---
