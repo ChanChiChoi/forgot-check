@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="8dp"
+    app:cardCornerRadius="8dp"
+    app:cardElevation="4dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="16dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvAlertType"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="进入提醒"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="#1976D2" />
+
+            <TextView
+                android:id="@+id/tvLocationName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="公司"
+                android:textSize="15sp"
+                android:textColor="#333333" />
+
+            <TextView
+                android:id="@+id/tvCoords"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="纬度: 39.9042, 经度: 116.4074"
+                android:textSize="13sp"
+                android:textColor="#666666" />
+
+            <TextView
+                android:id="@+id/tvDistance"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="距离: 15米"
+                android:textSize="13sp"
+                android:textColor="#666666" />
+
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:text="12:30:45"
+            android:textSize="13sp"
+            android:textColor="#999999" />
+
+    </LinearLayout>
+
+</androidx.cardview.widget.CardView>

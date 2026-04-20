@@ -26,6 +26,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.textfield.TextInputEditText;
 
 import java.util.ArrayList;
@@ -42,12 +43,16 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
     private static final int OVERLAY_PERMISSION_REQUEST_CODE = 1004;
 
     private RecyclerView recyclerView;
+    private RecyclerView recyclerViewLogs;
     private TextView tvEmpty;
+    private TextView tvLogEmpty;
     private TextView tvMonitorStatus;
     private androidx.appcompat.widget.SwitchCompat switchServiceStatus;
     private FloatingActionButton fabAdd;
     private CheckInLocationAdapter adapter;
+    private AlertLogAdapter logAdapter;
     private List<CheckInLocation> locationList = new ArrayList<>();
+    private List<AlertLogEntity> logList = new ArrayList<>();
 
     // Debug mode fields
     private android.widget.LinearLayout layoutPermissionWarning;
@@ -74,6 +79,9 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
     private ExecutorService executorService;
     private Handler mainHandler = new Handler(Looper.getMainLooper());
 
+    // TabLayout for switching between location list and alert logs
+    private TabLayout tabLayout;
+
     // Add dialog fields
     private AlertDialog addDialog;
     private TextInputEditText etName, etLatitude, etLongitude, etRadius;
@@ -88,10 +96,13 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
         setContentView(R.layout.activity_main);
 
         recyclerView = findViewById(R.id.recyclerView);
+        recyclerViewLogs = findViewById(R.id.recyclerViewLogs);
         tvEmpty = findViewById(R.id.tvEmpty);
+        tvLogEmpty = findViewById(R.id.tvLogEmpty);
         tvMonitorStatus = findViewById(R.id.tvMonitorStatus);
         switchServiceStatus = findViewById(R.id.switchServiceStatus);
         fabAdd = findViewById(R.id.fabAdd);
+        tabLayout = findViewById(R.id.tabLayout);
 
         // Debug views
         layoutPermissionWarning = findViewById(R.id.layoutPermissionWarning);
@@ -104,6 +115,27 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         adapter = new CheckInLocationAdapter(this);
         recyclerView.setAdapter(adapter);
+
+        recyclerViewLogs.setLayoutManager(new LinearLayoutManager(this));
+        logAdapter = new AlertLogAdapter();
+        recyclerViewLogs.setAdapter(logAdapter);
+
+        tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                if (tab.getPosition() == 0) {
+                    showLocationTab();
+                } else {
+                    showLogTab();
+                }
+            }
+
+            @Override
+            public void onTabUnselected(TabLayout.Tab tab) {}
+
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {}
+        });
 
         fabAdd.setOnClickListener(v -> showAddLocationDialog());
         btnPermissionWarningAction.setOnClickListener(v -> openAppSettings());
@@ -210,6 +242,9 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
             public void run() {
                 updateServiceStatus();
                 updatePermissionWarning();
+                if (LocationMonitorService.isActivityVisible && tabLayout != null && tabLayout.getSelectedTabPosition() == 0) {
+                    loadLocationsFromDatabase();
+                }
                 refreshHandler.postDelayed(this, 10_000);
             }
         };
@@ -226,11 +261,13 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
     @Override
     protected void onResume() {
         super.onResume();
+        LocationMonitorService.setActivityVisible(true);
         updateServiceStatus();
         updateDebugModeVisibility();
         updatePermissionWarning();
         updateMonitorStatusText();
         startPeriodicRefresh();
+        loadLogsFromDatabase();
 
         if (pendingStartServiceAfterPermission && hasRequiredMonitoringPermissions()) {
             pendingStartServiceAfterPermission = false;
@@ -238,9 +275,66 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
         }
     }
 
+    private void showLocationTab() {
+        recyclerView.setVisibility(View.VISIBLE);
+        tvEmpty.setVisibility(locationList.isEmpty() ? View.VISIBLE : View.GONE);
+        recyclerViewLogs.setVisibility(View.GONE);
+        tvLogEmpty.setVisibility(View.GONE);
+        fabAdd.setVisibility(View.VISIBLE);
+    }
+
+    private void showLogTab() {
+        recyclerView.setVisibility(View.GONE);
+        tvEmpty.setVisibility(View.GONE);
+        recyclerViewLogs.setVisibility(View.VISIBLE);
+        fabAdd.setVisibility(View.GONE);
+        loadLogsFromDatabase();
+    }
+
+    private void loadLogsFromDatabase() {
+        executorService.execute(() -> {
+            List<AlertLogEntity> logs = database.alertLogDao().getAllLogs();
+            mainHandler.post(() -> {
+                logList.clear();
+                logList.addAll(logs);
+                logAdapter.setLogs(logList);
+                if (tabLayout != null && tabLayout.getSelectedTabPosition() == 1) {
+                    tvLogEmpty.setVisibility(logList.isEmpty() ? View.VISIBLE : View.GONE);
+                }
+            });
+        });
+    }
+
+    private void logDebugAlert(CheckInLocationEntity entity, String alertType) {
+        if (debugCurrentLocation == null) return;
+
+        float[] results = new float[1];
+        android.location.Location.distanceBetween(
+                debugCurrentLocation.getLatitude(),
+                debugCurrentLocation.getLongitude(),
+                entity.latitude,
+                entity.longitude,
+                results
+        );
+
+        AlertLogEntity log = new AlertLogEntity(
+                entity.id,
+                entity.name,
+                alertType,
+                debugCurrentLocation.getLatitude(),
+                debugCurrentLocation.getLongitude(),
+                results[0]
+        );
+
+        executorService.execute(() -> {
+            database.alertLogDao().insertLog(log);
+        });
+    }
+
     @Override
     protected void onPause() {
         super.onPause();
+        LocationMonitorService.setActivityVisible(false);
         // Stop debug location updates when activity is paused
         stopDebugLocation();
         stopPeriodicRefresh();
@@ -585,6 +679,9 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
                                     ? "你进入了 " + entity.name + "，请记得打卡！"
                                     : "你离开了 " + entity.name + "，请记得打卡！";
 
+                            // Log the alert
+                            logDebugAlert(entity, isInside ? "enter" : "leave");
+
                             // Trigger reminder on main thread
                             final String msg = reminderMessage;
                             mainHandler.post(() -> triggerDebugReminder(msg));
@@ -595,7 +692,14 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
 
             // Reload location list from DB so cards show updated status
             if (statusChanged) {
-                mainHandler.post(() -> loadLocationsFromDatabase());
+                final android.location.Location locForAdapter = debugCurrentLocation;
+                mainHandler.post(() -> {
+                    loadLocationsFromDatabase();
+                    if (locForAdapter != null) {
+                        adapter.setCurrentLocation(locForAdapter);
+                        adapter.notifyDataSetChanged();
+                    }
+                });
             }
         });
     }
@@ -709,6 +813,10 @@ public class MainActivity extends Activity implements CheckInLocationAdapter.OnL
                 locationList.clear();
                 locationList.addAll(locations);
                 adapter.setLocations(locationList);
+                if (debugCurrentLocation != null) {
+                    adapter.setCurrentLocation(debugCurrentLocation);
+                }
+                adapter.notifyDataSetChanged();
                 updateEmptyView();
             });
         });

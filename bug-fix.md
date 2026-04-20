@@ -320,3 +320,126 @@ checkLocations()
 - `CODE_LOGIC.md`
 
 ---
+
+## v1.5 新增功能：告警日志 (2026-04-20)
+
+### 功能描述
+
+主界面新增 Tab 切换页，用于记录和查看每次告警事件，便于事后查看是否有漏报的提醒。
+
+### 实现方案
+
+#### 数据库层
+- 新增 `alert_logs` 表，存储告警日志
+- `AlertLogEntity`: 包含 `id`, `locationId`, `locationName`, `alertType`, `latitude`, `longitude`, `distance`, `triggeredAt`
+- `AlertLogDao`: 提供 `insertLog()`, `getAllLogs()`, `deleteOldLogs()` 等方法
+- `AppDatabase` 升级到 version 3，添加 `alertLogDao()`
+
+#### UI 层
+- `activity_main.xml` 新增 `TabLayout`（"打卡地点" / "告警日志"）
+- 新增 `recyclerViewLogs` RecyclerView 和 `tvLogEmpty` 空状态视图
+- `AlertLogAdapter`: 日志列表适配器，显示告警类型、地点、时间等信息
+- `MainActivity`: Tab 切换逻辑，`loadLogsFromDatabase()` 加载日志
+
+#### 服务层
+- `LocationMonitorService.triggerReminder()` 前调用 `logAlert()` 写入日志
+- `MainActivity.checkDebugGeofence()` 同样记录 Debug 模式触发的告警
+
+### 涉及文件
+
+- `AlertLogEntity.java` — 新增
+- `AlertLogDao.java` — 新增
+- `AlertLogAdapter.java` — 新增
+- `item_alert_log.xml` — 新增
+- `AppDatabase.java` — 新增 alertLogDao()，version 3
+- `LocationMonitorService.java` — 新增 logAlert()
+- `MainActivity.java` — 新增 Tab 切换、日志加载、logDebugAlert()
+- `activity_main.xml` — 新增 TabLayout、RecyclerView、tvLogEmpty
+
+---
+
+## v1.5 Bug Fixes (2026-04-20)
+
+### Bug #8: Debug 模式下距离正确但状态显示不正确
+
+**发现时间**: 2026-04-20
+**严重程度**: 高（Debug 模式核心功能状态显示不准确）
+
+#### 问题描述
+
+开启 Debug 模式后，打卡点距离显示 3 米（远小于设定的 20 米半径），但打卡点卡片状态仍显示"已离开"，未更新为"已进入"。
+
+#### 根因分析
+
+`checkDebugGeofence()` 中虽然调用了 `loadLocationsFromDatabase()` 从数据库重新加载打卡点数据，但 `adapter.setLocations()` 后未主动调用 `notifyDataSetChanged()` 确保 RecyclerView 强制刷新。
+
+#### 修复方案
+
+1. 在 `loadLocationsFromDatabase()` 的 mainHandler post 回调中，`setLocations()` 后额外调用 `notifyDataSetChanged()`
+2. 同时确保 `setCurrentLocation()` 在 `loadLocationsFromDatabase()` 后被调用，以刷新距离显示
+3. 在 `checkDebugGeofence()` 的 statusChanged 分支中，也添加 `adapter.notifyDataSetChanged()` 调用
+
+#### 涉及文件
+
+- `MainActivity.java`
+
+---
+
+### Bug #9: 后台运行时只显示对话框而非通知栏通知
+
+**发现时间**: 2026-04-20
+**严重程度**: 高（后台提醒方式错误，用户无法看到通知）
+
+#### 问题描述
+
+App 退到后台后，当触发地理围栏提醒时，应该显示通知栏通知，但实际却发送了前台对话框（只有在从通知栏点回 App 后才看到对话框）。
+
+#### 根因分析
+
+`LocationMonitorService.isAppInForeground()` 通过检查进程状态判断是否在前台：
+- 当 App 退到后台但 `LocationMonitorService` 作为前台服务运行时，进程仍然是 `IMPORTANCE_FOREGROUND`
+- 导致 `isAppInForeground()` 返回 `true`，错误地发送对话框而非通知
+
+#### 修复方案
+
+1. 在 `LocationMonitorService` 中新增静态标志 `isActivityVisible`
+2. 在 `MainActivity.onResume()` 中设置 `LocationMonitorService.setActivityVisible(true)`
+3. 在 `MainActivity.onPause()` 中设置 `LocationMonitorService.setActivityVisible(false)`
+4. 修改 `isAppInForeground()`，先检查 `isActivityVisible` 标志，若为 false 直接返回 false
+5. 优化 `sendReminderNotification()` 使用时间戳作为通知 ID（替代固定 ID），避免通知被覆盖
+
+#### 涉及文件
+
+- `LocationMonitorService.java` — 新增 isActivityVisible 标志和相关方法，修改 isAppInForeground()
+- `MainActivity.java` — onResume/onPause 中更新 Activity 可见性状态
+
+---
+
+### Bug #10: 主界面打卡点状态不刷新（非 Debug 模式）
+
+**发现时间**: 2026-04-20
+**严重程度**: 高（主界面状态显示与实际不符）
+
+#### 问题描述
+
+不开启 Debug 模式时，即使 `LocationMonitorService` 正在后台运行且数据库中的打卡点状态已更新，主界面上的打卡点状态卡片仍显示旧状态，不自动刷新。只有从通知栏点击进入 App 后状态才会改变。
+
+#### 根因分析
+
+`MainActivity.startPeriodicRefresh()` 每 10 秒只调用 `updateServiceStatus()` 和 `updatePermissionWarning()`，**没有调用 `loadLocationsFromDatabase()`** 来重新加载打卡点列表并刷新 RecyclerView。
+
+而 `LocationMonitorService.checkLocations()` 虽然更新了数据库中的状态，但主界面不会主动重新加载数据。
+
+#### 修复方案
+
+在 `startPeriodicRefresh()` 的刷新任务中，当 Activity 可见且当前 Tab 为"打卡地点"时，调用 `loadLocationsFromDatabase()` 重新加载打卡点列表数据。
+
+```java
+if (LocationMonitorService.isActivityVisible && tabLayout != null && tabLayout.getSelectedTabPosition() == 0) {
+    loadLocationsFromDatabase();
+}
+```
+
+#### 涉及文件
+
+- `MainActivity.java` — startPeriodicRefresh() 中新增 loadLocationsFromDatabase() 调用

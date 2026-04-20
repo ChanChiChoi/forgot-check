@@ -29,6 +29,8 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Foreground service that actively requests GPS location
@@ -48,6 +50,11 @@ public class LocationMonitorService extends Service {
     private static final long CHECK_INTERVAL_MS = 15_000; // Active GPS request every 15 seconds
 
     public static volatile boolean isServiceRunning = false;
+    public static volatile boolean isActivityVisible = false;
+
+    public static void setActivityVisible(boolean visible) {
+        isActivityVisible = visible;
+    }
 
     public static void startService(Context context) {
         Intent intent = new Intent(context, LocationMonitorService.class);
@@ -91,6 +98,7 @@ public class LocationMonitorService extends Service {
         database = AppDatabase.getInstance(this);
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         mainHandler = new Handler(Looper.getMainLooper());
+        executorServiceForLogs = Executors.newSingleThreadExecutor();
 
         // WakeLock to keep CPU awake for GPS polling when screen is off
         PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
@@ -160,6 +168,10 @@ public class LocationMonitorService extends Service {
         // Release WakeLock
         if (wakeLock != null && wakeLock.isHeld()) {
             wakeLock.release();
+        }
+        // Shutdown log executor
+        if (executorServiceForLogs != null) {
+            executorServiceForLogs.shutdown();
         }
     }
 
@@ -320,6 +332,7 @@ public class LocationMonitorService extends Service {
                         String reminderMessage = isInside
                                 ? "你进入了 " + entity.name + "，请记得打卡！"
                                 : "你离开了 " + entity.name + "，请记得打卡！";
+                        logAlert(entity, isInside ? "enter" : "leave", location);
                         triggerReminder(reminderMessage);
                     }
                 }
@@ -359,7 +372,38 @@ public class LocationMonitorService extends Service {
         }
     }
 
+    private void logAlert(CheckInLocationEntity entity, String alertType, Location location) {
+        if (location == null) return;
+
+        float[] results = new float[1];
+        Location.distanceBetween(
+                location.getLatitude(),
+                location.getLongitude(),
+                entity.latitude,
+                entity.longitude,
+                results
+        );
+
+        AlertLogEntity log = new AlertLogEntity(
+                entity.id,
+                entity.name,
+                alertType,
+                location.getLatitude(),
+                location.getLongitude(),
+                results[0]
+        );
+
+        executorServiceForLogs.execute(() -> {
+            database.alertLogDao().insertLog(log);
+        });
+    }
+
+    private ExecutorService executorServiceForLogs;
+
     private boolean isAppInForeground() {
+        if (!isActivityVisible) {
+            return false;
+        }
         ActivityManager activityManager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
         if (activityManager == null) return false;
 
@@ -408,6 +452,7 @@ public class LocationMonitorService extends Service {
 
     private void sendReminderNotification(String message) {
         Intent notificationIntent = new Intent(this, MainActivity.class);
+        notificationIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent pendingIntent = PendingIntent.getActivity(
                 this, 0, notificationIntent,
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
@@ -424,11 +469,12 @@ public class LocationMonitorService extends Service {
                 .setVibrate(new long[]{0, 500, 200, 500})
                 .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_REMINDER)
                 .build();
 
         NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (manager != null) {
-            manager.notify(REMINDER_NOTIFICATION_ID, notification);
+            manager.notify((int) System.currentTimeMillis(), notification);
         }
     }
 

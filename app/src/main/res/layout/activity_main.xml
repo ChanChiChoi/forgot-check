@@ -137,6 +137,28 @@
 
     </LinearLayout>
 
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/tabLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/layoutTopStatus"
+        android:background="#FFFFFF"
+        app:tabIndicatorColor="#1976D2"
+        app:tabSelectedTextColor="#1976D2"
+        app:tabTextColor="#999999">
+
+        <com.google.android.material.tabs.TabItem
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="打卡地点" />
+
+        <com.google.android.material.tabs.TabItem
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="告警日志" />
+
+    </com.google.android.material.tabs.TabLayout>
+
     <TextView
         android:id="@+id/tvEmpty"
         android:layout_width="wrap_content"
@@ -151,10 +173,31 @@
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_below="@id/layoutTopStatus"
+        android:layout_below="@id/tabLayout"
         android:layout_above="@id/fabAdd"
         android:padding="8dp"
         android:clipToPadding="false" />
+
+    <TextView
+        android:id="@+id/tvLogEmpty"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:text="暂无告警日志"
+        android:textSize="16sp"
+        android:textColor="#999999"
+        android:gravity="center"
+        android:visibility="gone" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerViewLogs"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/tabLayout"
+        android:layout_above="@id/fabAdd"
+        android:padding="8dp"
+        android:clipToPadding="false"
+        android:visibility="gone" />
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabAdd"

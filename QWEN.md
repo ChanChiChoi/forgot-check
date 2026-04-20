@@ -37,6 +37,7 @@
 | **v1.2** | 设置页面（震动/弹窗/通知/倒计时开关） | ✅ DONE | `忘打卡-v1.2-release.apk` |
 | **v1.3** | 主动GPS请求 + 智能轮询 + 滑块UI + Debug模式 + 震动2s | ✅ DONE | `忘打卡-v1.3-release.apk` |
 | **v1.4** | 闹铃声音提醒开关（检测系统铃声模式） | ✅ DONE | `忘打卡-v1.4-release.apk` |
+| **v1.5** | 告警日志功能（Tab切换、记录每次告警事件） | ✅ DONE | `忘打卡-v1.5-release.apk` |
 
 ### M1-M7 (v1.0, v1.1, v1.2) — See previous QWEN.md for details
 
@@ -93,6 +94,21 @@
   - Returning from Settings auto-starts the service if permissions are complete
   - Main screen now shows a warning banner when background location is still missing
 - Built release APK: `忘打卡-v1.4.1-release.apk` ✅ LATEST
+
+### v1.5 Completed (2026-04-20)
+- **告警日志功能**: 主界面新增 Tab 切换页 ("打卡地点" / "告警日志")
+- **日志记录**: 每次触发进入/离开提醒时，自动记录告警事件到数据库
+- **日志内容**: 包含告警时间、告警类型（进入/离开）、地点名称、GPS坐标、距离
+- **日志表**: 新增 `alert_logs` 表，`AlertLogEntity` 实体类
+- **日志 DAO**: `AlertLogDao` 提供插入、查询、删除操作
+- **UI 更新**: `TabLayout` + `RecyclerView` 显示日志列表，`AlertLogAdapter` 适配器
+- **数据层**: `AppDatabase` 升级到 version 3，添加 `alertLogDao()`
+- **日志写入**: `LocationMonitorService.triggerReminder()` 前调用 `logAlert()` 写入日志
+- **Debug 模式**: `MainActivity.checkDebugGeofence()` 同样记录告警日志
+- **Bug #8 修复**: Debug 模式状态显示不正确，`loadLocationsFromDatabase()` 后强制 `notifyDataSetChanged()`
+- **Bug #9 修复**: 后台运行时只发对话框不发通知，新增 `isActivityVisible` 标志区分 Activity 可见性与进程前台状态
+- **Bug #10 修复**: 主界面打卡点状态不刷新，`startPeriodicRefresh()` 中增加 `loadLocationsFromDatabase()` 调用
+- Built release APK: `忘打卡-v1.5-release.apk` ✅ LATEST
 
 ---
 
@@ -285,17 +301,20 @@ annotationProcessor 'androidx.room:room-compiler:2.6.1'
 | `build.gradle` (root) | Top-level build script with AGP 8.7.2 |
 | `gradle.properties` | AndroidX enabled, non-transitive R class disabled |
 | `AndroidManifest.xml` | Declares activities, service, receiver, all permissions |
-| `MainActivity.java` | Main screen with RecyclerView, FAB, service toggle switch, permissions |
+| `MainActivity.java` | Main screen with RecyclerView, FAB, service toggle switch, TabLayout, permissions |
 | `HelpActivity.java` | Usage instructions page |
 | `SettingsActivity.java` | Settings page (vibration/popup/notification/countdown/debug toggles) |
 | `CheckInLocation.java` | Domain model: name, coords, radius, enabled, status, time ranges |
 | `CheckInLocationAdapter.java` | RecyclerView adapter with switch, click & long-press |
 | `CheckInLocationEntity.java` | Room entity with CRUD mapping |
 | `CheckInLocationDao.java` | Room DAO with all CRUD operations |
-| `AppDatabase.java` | Room database singleton (version 2, destructive migration) |
+| `AlertLogEntity.java` | Room entity for alert logs (location, type, time, coords, distance) |
+| `AlertLogDao.java` | Room DAO for alert log operations |
+| `AlertLogAdapter.java` | RecyclerView adapter for alert log list |
+| `AppDatabase.java` | Room database singleton (version 3, destructive migration) |
 | `LocationMonitorService.java` | Foreground service with active GPS polling, geofence, smart scheduling, reminders |
 | `BootReceiver.java` | BOOT_COMPLETED receiver to restart service |
-| `PLAN.md` | Full development roadmap (M1-M8, v1.1-v1.3, all complete) |
+| `PLAN.md` | Full development roadmap (M1-M8, v1.1-v1.5, all complete) |
 | `bug-fix.md` | Bug fix log with root cause analysis |
 
 ## APK Output Naming Convention
@@ -306,5 +325,5 @@ annotationProcessor 'androidx.room:room-compiler:2.6.1'
 | `app-debug-v1.1.apk` | v1.1 debug build |
 | `app-debug-v1.3.apk` | v1.3 debug build |
 | `忘打卡-v1.3-release.apk` | v1.3 release (outdated) |
-| `忘打卡-v1.4-release.apk` | **v1.4 release: Alarm Sound Toggle (LATEST)** |
-| `忘打卡-v1.2-release.apk` | v1.2 release (outdated) |
+| `忘打卡-v1.4-release.apk` | v1.4 release (outdated) |
+| `忘打卡-v1.5-release.apk` | **v1.5 release: Alert Log Feature + Bug Fixes (LATEST)** |
