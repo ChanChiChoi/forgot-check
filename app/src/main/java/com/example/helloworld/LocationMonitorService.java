@@ -1,6 +1,7 @@
 package com.example.helloworld;
 
 import android.app.ActivityManager;
+import android.app.AlarmManager;
 import android.app.AlertDialog;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -24,6 +25,7 @@ import android.os.Looper;
 import android.os.PowerManager;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.provider.Settings;
 
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
@@ -48,6 +50,8 @@ public class LocationMonitorService extends Service {
     private static final int NOTIFICATION_ID = 1001;
     private static final int REMINDER_NOTIFICATION_ID = 1002;
     private static final long CHECK_INTERVAL_MS = 15_000; // Active GPS request every 15 seconds
+    private static final int ALARM_REQUEST_CODE = 2001;
+    private static final long ALARM_INTERVAL_MS = 60_000; // Backup alarm every 60 seconds if primary fails
 
     public static volatile boolean isServiceRunning = false;
     public static volatile boolean isActivityVisible = false;
@@ -107,6 +111,9 @@ public class LocationMonitorService extends Service {
                 "WangDaKa::LocationPoll"
         );
 
+        // Request battery optimization exemption for more reliable background polling
+        requestBatteryOptimizationExemption();
+
         createNotificationChannel();
 
         Notification notification = buildNotification("正在监控打卡位置...");
@@ -138,6 +145,13 @@ public class LocationMonitorService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent != null && "android.intent.action.BACKUP_CHECK".equals(intent.getAction())) {
+            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
+                    == PackageManager.PERMISSION_GRANTED) {
+                backgroundHandler.removeCallbacks(checkLocationRunnable);
+                backgroundHandler.post(checkLocationRunnable);
+            }
+        }
         return START_STICKY;
     }
 
@@ -186,6 +200,63 @@ public class LocationMonitorService extends Service {
      */
     private void scheduleNextCheck() {
         backgroundHandler.postDelayed(checkLocationRunnable, CHECK_INTERVAL_MS);
+        scheduleBackupAlarm();
+    }
+
+    private void scheduleBackupAlarm() {
+        try {
+            AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+            if (alarmManager == null) return;
+
+            Intent intent = new Intent(this, LocationMonitorService.class);
+            intent.setAction("android.intent.action.BACKUP_CHECK");
+            PendingIntent pendingIntent = PendingIntent.getService(
+                    this,
+                    ALARM_REQUEST_CODE,
+                    intent,
+                    PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
+            );
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (alarmManager.canScheduleExactAlarms()) {
+                    alarmManager.setExactAndAllowWhileIdle(
+                            AlarmManager.RTC_WAKEUP,
+                            System.currentTimeMillis() + ALARM_INTERVAL_MS,
+                            pendingIntent
+                    );
+                } else {
+                    alarmManager.setAndAllowWhileIdle(
+                            AlarmManager.RTC_WAKEUP,
+                            System.currentTimeMillis() + ALARM_INTERVAL_MS,
+                            pendingIntent
+                    );
+                }
+            } else {
+                alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        System.currentTimeMillis() + ALARM_INTERVAL_MS,
+                        pendingIntent
+                );
+            }
+        } catch (Exception e) {
+            // Ignore alarm scheduling failures
+        }
+    }
+
+    private void requestBatteryOptimizationExemption() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
+                Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                intent.setData(Uri.parse("package:" + getPackageName()));
+                try {
+                    startActivity(intent);
+                } catch (Exception e) {
+                    // Device may not support this, ignore
+                }
+            }
+        }
     }
 
     private void createNotificationChannel() {

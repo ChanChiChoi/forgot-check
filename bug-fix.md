@@ -443,3 +443,31 @@ if (LocationMonitorService.isActivityVisible && tabLayout != null && tabLayout.g
 #### 涉及文件
 
 - `MainActivity.java` — startPeriodicRefresh() 中新增 loadLocationsFromDatabase() 调用
+
+---
+
+## Bug #11: Android 14 后台 GPS 轮询停止（荣耀50）
+
+**发现时间**: 2026-04-28
+**严重程度**: 高（后台监控失效，熄屏后不轮询 GPS）
+
+#### 问题描述
+
+荣耀50（Android 14）开启监控后放置后台，通知栏显示"正在监控"，但进出围栏时没有任何提醒。熄屏放置后 GPS 轮询停止。
+
+#### 根因分析
+
+1. **Doze + App Standby**: Android 14 对后台服务的限制更严格，HandlerThread 在屏幕关闭后可能被挂起
+2. **电池优化**: 系统默认将第三方 app 置于"不优化"状态，但即使加了 WakeLock，深度 Doze 仍可能延迟轮询
+3. **无保活机制**: 纯 HandlerThread + WakeLock 在 Android 14 上不够可靠
+
+#### 修复方案
+
+1. **请求电池优化白名单**: 在 `onCreate()` 中调用 `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`，引导用户将 app 加入白名单
+2. **AlarmManager 备份机制**: 每次 `scheduleNextCheck()` 时同时设置一个 60 秒后的 Alarm，如果主线程被延迟，Alarm 会唤醒服务执行 `checkLocations()`
+3. **响应 BACKUP_CHECK action**: `onStartCommand()` 检测到 `BACKUP_CHECK` action 时立即执行 GPS 检查
+
+#### 涉及文件
+
+- `LocationMonitorService.java` — 新增 `scheduleBackupAlarm()`, `requestBatteryOptimizationExemption()`, 处理 `BACKUP_CHECK` action
+- `AndroidManifest.xml` — 已在现有配置中（`RECEIVE_BOOT_COMPLETED` 已存在）
