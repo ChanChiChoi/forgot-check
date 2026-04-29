@@ -39,6 +39,10 @@ public interface CheckInLocationDao {
     void updateTimeRanges(long id, boolean enterEnabled, String enterStart, String enterEnd,
                           boolean leaveEnabled, String leaveStart, String leaveEnd);
 
+    @Query("UPDATE checkin_locations SET was_in_enter_time_window = :inEnterWindow, " +
+            "was_in_leave_time_window = :inLeaveWindow WHERE id = :id")
+    void updateTimeWindowState(long id, boolean inEnterWindow, boolean inLeaveWindow);
+
     @Query("DELETE FROM checkin_locations")
     void deleteAll();
 }

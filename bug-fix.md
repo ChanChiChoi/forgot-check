@@ -471,3 +471,58 @@ if (LocationMonitorService.isActivityVisible && tabLayout != null && tabLayout.g
 
 - `LocationMonitorService.java` — 新增 `scheduleBackupAlarm()`, `requestBatteryOptimizationExemption()`, 处理 `BACKUP_CHECK` action
 - `AndroidManifest.xml` — 已在现有配置中（`RECEIVE_BOOT_COMPLETED` 已存在）
+
+---
+
+## Bug #12: 提前进入打卡范围，时间窗口开启后不再触发提醒
+
+**发现时间**: 2026-04-29
+**严重程度**: 高（时间窗口功能失效，用户无法在期望时间收到提醒）
+
+#### 问题描述
+
+用户提前进入打卡范围（如 8:49 进入公司），状态从 unknown 变为 inside，但由于不在时间窗口内（如 8:50-9:03），没有触发提醒。到了 8:50 时间窗口开启后，状态已经是 inside，不再有状态变化，因此永远不会触发进入提醒。
+
+#### 根因分析
+
+原有逻辑只在**状态变化**时检测是否触发提醒。如果用户在时间窗口开启前已经进入打卡范围，时间窗口开启后由于状态没有变化，不会触发提醒。
+
+#### 修复方案
+
+1. 在 `CheckInLocationEntity` 中新增 `wasInEnterTimeWindow` 和 `wasInLeaveTimeWindow` 字段，追踪上次检查时的时间窗口状态
+2. 在 `CheckInLocation` 中添加对应的字段和 getter/setter
+3. 在 `CheckInLocationDao` 中新增 `updateTimeWindowState()` 方法
+4. 修改 `LocationMonitorService.checkLocations()`：
+   - 每次轮询时检测时间窗口状态是否变化（从窗口外进入窗口内）
+   - 如果状态已是 inside 且刚从 enter 时间窗口外进入窗口内，触发进入提醒
+   - 更新数据库中的时间窗口状态
+
+#### 涉及文件
+
+- `CheckInLocationEntity.java` — 新增 `wasInEnterTimeWindow`, `wasInLeaveTimeWindow` 字段
+- `CheckInLocation.java` — 新增对应字段和 getter/setter
+- `CheckInLocationDao.java` — 新增 `updateTimeWindowState()` 方法
+- `LocationMonitorService.java` — 修改 `checkLocations()` 逻辑
+
+---
+
+## Bug #13: 告警日志时间显示缺少年月日
+
+**发现时间**: 2026-04-29
+**严重程度**: 中（告警日志时间信息不完整）
+
+#### 问题描述
+
+告警日志列表中的时间只显示时分秒（如 "14:32:05"），缺少年月日信息，不便于查看具体是哪天的告警记录。
+
+#### 根因分析
+
+`AlertLogAdapter.java` 中使用 `SimpleDateFormat("HH:mm:ss", ...)` 格式，只包含时间部分。
+
+#### 修复方案
+
+将时间格式改为 `SimpleDateFormat("yyyy-MM-dd HH:mm:ss", ...)`。
+
+#### 涉及文件
+
+- `AlertLogAdapter.java` — 修改时间格式

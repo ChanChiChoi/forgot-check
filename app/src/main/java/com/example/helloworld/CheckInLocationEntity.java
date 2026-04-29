@@ -48,6 +48,12 @@ public class CheckInLocationEntity {
     @ColumnInfo(name = "leave_time_end")
     public String leaveTimeEnd;
 
+    @ColumnInfo(name = "was_in_enter_time_window")
+    public boolean wasInEnterTimeWindow;
+
+    @ColumnInfo(name = "was_in_leave_time_window")
+    public boolean wasInLeaveTimeWindow;
+
     public CheckInLocationEntity() {
         this.enabled = true;
         this.status = "unknown";
@@ -87,6 +93,8 @@ public class CheckInLocationEntity {
         location.setLeaveTimeEnabled(leaveTimeEnabled);
         location.setLeaveTimeStart(leaveTimeStart);
         location.setLeaveTimeEnd(leaveTimeEnd);
+        location.setWasInEnterTimeWindow(wasInEnterTimeWindow);
+        location.setWasInLeaveTimeWindow(wasInLeaveTimeWindow);
         return location;
     }
 
@@ -107,6 +115,8 @@ public class CheckInLocationEntity {
         entity.leaveTimeEnabled = location.isLeaveTimeEnabled();
         entity.leaveTimeStart = location.getLeaveTimeStart();
         entity.leaveTimeEnd = location.getLeaveTimeEnd();
+        entity.wasInEnterTimeWindow = location.wasInEnterTimeWindow();
+        entity.wasInLeaveTimeWindow = location.wasInLeaveTimeWindow();
         return entity;
     }
 }

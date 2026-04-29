@@ -20,6 +20,9 @@ public class CheckInLocation {
     private String leaveTimeStart;   // e.g. "17:50"
     private String leaveTimeEnd;     // e.g. "18:10"
 
+    private boolean wasInEnterTimeWindow;
+    private boolean wasInLeaveTimeWindow;
+
     public CheckInLocation() {
         this.status = "unknown";
         this.enabled = true;
@@ -82,6 +85,11 @@ public class CheckInLocation {
     public void setLeaveTimeStart(String leaveTimeStart) { this.leaveTimeStart = leaveTimeStart; }
     public String getLeaveTimeEnd() { return leaveTimeEnd; }
     public void setLeaveTimeEnd(String leaveTimeEnd) { this.leaveTimeEnd = leaveTimeEnd; }
+
+    public boolean wasInEnterTimeWindow() { return wasInEnterTimeWindow; }
+    public void setWasInEnterTimeWindow(boolean wasInEnterTimeWindow) { this.wasInEnterTimeWindow = wasInEnterTimeWindow; }
+    public boolean wasInLeaveTimeWindow() { return wasInLeaveTimeWindow; }
+    public void setWasInLeaveTimeWindow(boolean wasInLeaveTimeWindow) { this.wasInLeaveTimeWindow = wasInLeaveTimeWindow; }
 
     /**
      * Check if current time falls within the enter (上班) time window.

@@ -17,7 +17,7 @@ import java.util.Locale;
 public class AlertLogAdapter extends RecyclerView.Adapter<AlertLogAdapter.ViewHolder> {
 
     private List<AlertLogEntity> logs = new ArrayList<>();
-    private SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
+    private SimpleDateFormat timeFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
 
     @NonNull
     @Override

@@ -385,8 +385,15 @@ public class LocationMonitorService extends Service {
 
             boolean isInside = distance <= entity.radiusMeters;
             String newStatus = isInside ? "inside" : "outside";
+            boolean inEnterWindow = checkInLocation.isInEnterTimeWindow();
+            boolean inLeaveWindow = checkInLocation.isInLeaveTimeWindow();
+            boolean timeWindowStateChanged = (checkInLocation.wasInEnterTimeWindow() != inEnterWindow)
+                    || (checkInLocation.wasInLeaveTimeWindow() != inLeaveWindow);
 
-            // Always update status in database (even if outside time window)
+            if (timeWindowStateChanged) {
+                database.locationDao().updateTimeWindowState(entity.id, inEnterWindow, inLeaveWindow);
+            }
+
             if (!entity.status.equals(newStatus)) {
                 String oldStatus = entity.status;
 
@@ -407,6 +414,16 @@ public class LocationMonitorService extends Service {
                         triggerReminder(reminderMessage);
                     }
                 }
+
+                if (isInside) {
+                    checkInLocation.setStatus("inside");
+                } else {
+                    checkInLocation.setStatus("outside");
+                }
+            } else if ("inside".equals(newStatus) && inEnterWindow && !checkInLocation.wasInEnterTimeWindow()) {
+                String reminderMessage = "你进入了 " + entity.name + "，请记得打卡！";
+                logAlert(entity, "enter", location);
+                triggerReminder(reminderMessage);
             }
         }
 
